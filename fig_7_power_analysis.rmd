@@ -1,0 +1,269 @@
+---
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+header-includes:
+  - \usepackage{titling}
+  - \pretitle{\begin{flushleft}}
+  - \posttitle{\end{flushleft}}
+---
+
+```{r setup, include=FALSE,warning=FALSE,  message=FALSE}
+library(ragg)
+knitr::opts_chunk$set(echo = TRUE,dev = "ragg_png", cache=TRUE) 
+WRITE_PLOTS<<-TRUE
+```
+
+
+
+```{r includes,warning=FALSE,  message=FALSE}
+library(here)
+code<-here("R_script")
+data<-here("Data")
+figure_parts<-here("figure_parts")
+source(here(code,"paper_common.R"))
+source(here(code,"plot_common.R"))
+emm_sig_summary_paper<-emm_sig_summary_paper
+
+```
+
+
+```{r paper_heading,warning=FALSE,  message=FALSE, echo=FALSE}
+
+a<-("From:\n")
+b<-(read_file(here("title.txt")))
+c<-(read_file(here("authors.txt")))
+
+title<-paste("Analysis underlying figure 5 from ",b)
+authors<-paste("By: ",c)
+
+```
+
+## determine which animals demonstrated rapid recovery of AKI by creatinine
+
+For this calculation, the baseline creatinine is the "hospital admission relevant" time zero value, not the pre-injury value.
+
+```{r time to creat recovery, warning=FALSE, message=FALSE}
+
+cr<-M%>%select(x,plCR,x_units, plCK,plCR_units,weight_kg,animal,last_hr)%>%
+  mutate(cr=plCR,y=plCR, units_x=x_units, plCK=plCK,units_y=plCR_units,weight=weight_kg)
+cr<-cr%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=-1)&(x<=48))
+
+thresh=1.5
+max_thresh=0.7
+
+
+last_cr<-cr%>%group_by(animal)%>%mutate(plCRisna=is.na(plCR))%>%select(animal,x,plCR,plCRisna)
+
+cr<-cr%>%group_by(animal)%>%
+  mutate(base_cr=plCR[x==0])%>% #baseline here is "hospital admission" not actual baseline
+  mutate(cr2h=plCR[x==2])%>%
+  mutate(CK_base=plCK[x==-1])%>%
+  mutate(CK2h=plCK[x==2])%>%
+  mutate(CKdelta2h=CK2h-CK_base)%>%
+  mutate(cr48=plCR[x==max(x)])%>%
+  mutate(frac_cr48_base=cr48/base_cr)%>%
+  mutate(maxCR=max(plCR,na.rm=T))%>%
+  mutate(cr48_lte_thresh_x_base=cr48<=thresh*base_cr)%>%
+  mutate(cr48_lte_thresh_x_max=cr48<=max_thresh*maxCR)%>%
+  mutate(frac_cr48_max=cr48/maxCR)%>%
+  mutate(mult_max_base=maxCR/base_cr)%>%
+  mutate(maxCK=max(plCK,na.rm=T))%>%
+  ungroup()
+
+rrcr<-cr%>%group_by(animal)%>%reframe(animal,tx,base_cr,cr48,maxCR,frac_cr48_base,frac_cr48_max,cr48_lte_thresh_x_base,cr48_lte_thresh_x_max)%>%distinct
+
+
+rrcr<-rrcr%>%mutate(tx=fct_relevel(tx,"veh", "cil"))
+rrcr<-rrcr%>%mutate(tx=relevel(tx,ref="veh"))
+rrcr<-droplevels(rrcr)
+pcr<-table(rrcr$tx,rrcr$cr48_lte_thresh_x_max)
+
+chisq.test(pcr,simulate.p.value = T,B=10000)
+rownames(pcr)<-c("veh","cil")
+colnames(pcr)<-c("Nonrecovery","Recovery")
+pcr 
+
+```
+
+
+
+# Data from the potential study population
+
+3 papers from KwaZulu-Natal and Cape Town describe a population of blunt trauma patients with crush syndrome. 2 additional papers from China describe crush syndrome in earthquake victims.
+
+## South Africa, blunt trauma.
+
+(<https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1279914/>) A description of AKI after "punishment beatings". (<https://pubmed.ncbi.nlm.nih.gov/33944766/>) mean CK 5311, at this CK mean cr 1.6 (mg/dL) at admission, South Africa (SA), blunt trauma--essentially the currently proposed population for this study. IQR=44, which is sCr 0.5 mg/dL, which is sd=0.4. (<https://pubmed.ncbi.nlm.nih.gov/30463744/>) (mean cr on presentation to SA trauma service with AKI 2.2), all comers.
+
+## Earthquakes.
+
+(<https://pubmed.ncbi.nlm.nih.gov/32008829>) (mean cr 1.9 +- 0.65), earthquake crush syndrome pts with AKI. (<https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2865457/>) mean cr 1.85 (163), earthquake crush syndrome pts.
+
+Taken together, these papers suggest that the South African population may be representative of a reified/aggregate human population with crush syndrome. In the South African population with access to medical care, baseline creatinine is 1.6 +/- 0.4 mg/dL. We will take this as the powering baseline.
+
+
+We have followed the powering method of simulation, using these two resources:
+
+(<https://nickch-k.github.io/EconometricsSlides/Week_08/Power_Simulations.html>) (<https://bmcmedresmethodol.biomedcentral.com/articles/10.1186/1471-2288-11-94>)
+
+
+
+```{r modeling pig creatinine, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+
+
+SAmean<-1.6
+SAsd<-0.4
+
+cr<-cr%>%mutate(tx=fct_relevel(tx,"veh", "cil"))
+cr<-cr%>%mutate(tx=relevel(tx,ref="veh"))
+cr<-droplevels(cr)
+
+cr<-cr%>%group_by(animal)%>%mutate(cr.delta=max(plCR,na.rm=T)-plCR[x==0])
+
+PmultCRm<-cr%>%group_by(animal)%>%select(mult_max_base)%>%distinct()%>%ungroup()%>%summarize(mean=mean(mult_max_base, na.rm=T))%>%unlist()
+
+PmultCRsd<-cr%>%group_by(animal)%>%select(mult_max_base)%>%distinct()%>%ungroup()%>%summarize(sd=sd(mult_max_base, na.rm=T))%>%unlist()
+
+smallcr<-cr%>%group_by(animal)%>%select(animal,CKdelta2h, CK2h,base_cr,maxCK,maxCR,cr48,tx,weight_kg)%>%distinct()
+
+model_base_max<-lm(maxCR~base_cr, data=filter(smallcr,tx!="cil"))
+summary(model_base_max)
+
+model_max_48<-lm(cr48~maxCR+tx, data=smallcr)
+summary(model_max_48)
+
+get_kdigo_stage<-function (baseline, later){ #modified from the epocakir package
+  dplyr::case_when(later >= 4 ~ 3,
+                   later >= 3 * baseline ~ 3,
+                   later >= 2 * baseline ~ 2,
+                   later >= 1.5 * baseline ~ 1,
+                   later >= (baseline+0.3) ~ 1,
+                   TRUE ~ NA)
+}
+
+determine_power<-function(iterations=10, startn=200, stopn=200, alpha=0.05,statmodel_base_max,statmodel_48, max_thresh=0.7) {
+  t_df<-data.frame()
+  for (n in startn:stopn){
+    if (n%%10==0){print(n)}
+    chi.rec7.at.48<-c()
+    p.recovered.at.48<-c()
+
+        for (i in 1:iterations){
+      assignment.cila<-sample(c("cil","veh"), n, replace = TRUE, prob = c(0.5,0.5)) 
+      sim.sa.admit.cr<-rnorm(n,SAmean,SAsd)
+      popdf<-data.frame(tx=assignment.cila,base_cr=sim.sa.admit.cr)
+      popdf$x<-48
+      popdf$maxCR<-predict(statmodel_base_max,newdata=popdf)
+      popdf$cr48<-predict(statmodel_48,newdata=popdf)
+      popdf<-popdf%>%mutate(pred.max48delta=maxCR-cr48)
+      popdf<-popdf%>%mutate(cr48_lte_thresh_x_max=(cr48<=max_thresh*maxCR))
+
+      chi.table<-table(popdf$tx,popdf$cr48_lte_thresh_x_max)
+
+      test<-chisq.test(chi.table,correct=FALSE)
+
+      p.recovered.at.48[i]<-test$p.value[[1]]
+
+      
+    }
+    n_df<-data.frame(p.recovered.at.48,n=n,alpha=alpha)
+    t_df<-bind_rows(t_df,n_df)
+  }
+  
+  
+  return (t_df)
+}
+```
+
+Now we call the function.
+
+```{r doing the power simulation, eval=TRUE,echo=TRUE, warning=FALSE, error=FALSE, message=FALSE}
+iterations=500
+
+power_curve<-determine_power(startn=20, stopn=200, iterations=iterations,alpha=0.01,model_base_max,model_max_48,max_thresh=0.7)
+
+
+z<-power_curve%>%group_by(n)%>%summarise(p.recovered.at.48=p.recovered.at.48,alpha=alpha,n=n,                                         power.p.recovered.at.48=sum(ifelse(p.recovered.at.48<alpha,TRUE,FALSE))/n(),
+                                         )%>%ungroup()
+
+```
+
+Once we've done the power calculation, we can plot the data and use it to make some decisions.
+
+Each dot is the result of a simulated complete study.
+
+```{r eval results, eval=FALSE,echo=FALSE, warning=FALSE, error=FALSE, message=FALSE}
+#powerdata<-read_csv("power_data_07292023.csv")
+powerdata<-z
+```
+
+```{r plot code, eval=TRUE,echo=FALSE, warning=FALSE, error=FALSE, message=FALSE}
+
+ylab<-"p value"
+title<-"p_val_recovery.tiff"     
+pvalplot<-ggplot(power_curve, aes(x=n,y=p.recovered.at.48))+
+  geom_point(size=0.01,alpha=0.2)+
+  geom_smooth()+
+  geom_hline(yintercept=0.05, linetype = "dashed", alpha=0.3, color="red")+
+  geom_hline(yintercept=0.01, linetype = "dashed", alpha=0.3, color="red")+
+  coord_cartesian(ylim=c(0,0.25))+
+  theme_classic()+
+   ylab(ylab)+
+  ggtitle("Creatinine recovery at 48h")
+
+pvalplot
+if(WRITE_PLOTS){ggsave(filename=here(figure_parts,title),plot=pvalplot, width=3.0, height=2.25,dpi=300,units="in")}
+
+
+ylab<-"Power"
+title<-"power_recovery.tiff" 
+powerplot<-ggplot(z,aes(x=n,y=power.p.recovered.at.48))+
+  geom_point(size=0.01,alpha=0.1)+
+  geom_hline(yintercept=0.8, linetype = "dashed", alpha=0.3, color="red")+
+  geom_hline(yintercept=0.9, linetype = "dashed", alpha=0.3, color="red")+
+  geom_smooth()+
+  theme_classic()+
+  ylab(ylab)+
+  ggtitle("Creatinine recovery at 48h")
+
+powerplot
+if(WRITE_PLOTS){ggsave(filename=here(figure_parts,title),plot=powerplot, width=3.0, height=2.25,dpi=300,units="in")}
+
+```
+
+It is computationally convenient to extract the n from the power plots.
+
+```{r plot to extract the model data, eval=TRUE,echo=TRUE, warning=TRUE, error=TRUE, message=TRUE}
+
+power_data<-ggplot_build(powerplot) 
+q<-power_data$dat[[1]]
+n90<-min(q$x[q$y>0.9]) 
+n80<-min(q$x[q$y>0.8]) 
+print(n80)
+
+```
+
+
+
+## Power estimates
+
+After performing Monte Carlo simulation of `r iterations` clinical trials we have the following result:
+
+At alpha=0.01, 80% power for the outcome of creatinine recovery to 70% of maximal at 48h after injury is provided by `r toString(n80)` total patients.
+
+At alpha=0.01, 90% power for the outcome of creatinine recovery to 70% of maximal at 48h after injury is provided by `r n90` total patients.

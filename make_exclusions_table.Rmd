@@ -1,0 +1,52 @@
+---
+title: "make_exclusions_table"
+author: "Michael Hutchens"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+  word_document:
+    reference_docx: "word-styles-reference-01.docx"
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if( !require(here)   ){install.packages("here"); require(here)}
+if( !require(kableExtra)   ){install.packages("kableExtra"); require(kableExtra)}
+code<-here("R_script")
+data<-here("Data")
+here()
+source(here(code,"paper_common.R"))
+```
+
+# Table of exclusions
+```{r get data, echo=FALSE, results="show"}
+df<-read_excel(here(data, "canonical_exclusions.xlsx"))
+
+
+knitr::kable(df, booktabs = T, padding = 0,digits=2, align="l")%>%kable_styling(font_size = 7)%>%landscape()
+
+```
+
+Animals were excluded from the study for either very abnormal baseline values (pre-injury fail) mean arterial presure (map), or weight-based plasma creatine kinase (CK), plasma myoglobin (MB), plasma creatinine (CR), or plasma potassium (K) or not achieving the injury (CK) threshold (post-injury fail). Baseline lab values were scaled (converted to z scores, e.g. map_z) and animals were excluded for absolute value scaled scores \\>2 (i.e., 2 standard deviations greater or less than the mean). The injury threshold was determined as the minimum 6h CK value after impact which resulted in elevated plasma creatinine.
+
+
+```{r double-check the impact miss exclusions, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE, results="hide"}
+exCK<-c(56,66,69,76,81,83) #these are the impact miss exclusion animals
+Mne<-get_master(file.path(DATAHUB, "Master_ALL.unfiltered.xlsx"))
+ck<-Mne%>%select(animal,x,plCK, weight_kg)
+ck<-ck%>%mutate(plCKkg=plCK/weight_kg)
+ck<-ck%>%group_by(animal)%>%mutate(plCKkgDelta=plCKkg-plCKkg[x==-1])%>%ungroup()
+ck<-ck%>%filter((animal%in%exCK)|(animal%in%included))%>%
+  filter((x<12))%>%
+  rowwise()%>%mutate(ckexclude=(animal%in%exCK))%>%ungroup()
+model<-lmer(plCKkgDelta~ckexclude*factor(x)+(1|animal), data=ck)
+summary(model)
+emm_model <- emmeans(model,~ckexclude*as.factor(x),level=0.95)
+emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+spairs
+```

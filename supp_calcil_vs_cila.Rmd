@@ -1,0 +1,673 @@
+---
+title: "Cila-Calcil: Testing for difference/nondifference"
+author: "Michael Hutchens"
+date: "`r Sys.Date()`"
+output:
+  word_document:
+    reference_docx: "word-styles-reference-01.docx"
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("paper_common.R")
+source("plot_common.R")
+detach('package:lmerTest')
+table_column_names<-c("Contrast","Time(h)"," Estimate","SE ","df ","t.ratio","p.value")
+```
+
+## Did adding calcitriol to cilastatin sodium have any effect on renal or other physiology?
+
+The study was planned to test vehicle versus cilastatin sodium, and to secondarily test whether a putative loss of vitamin D in the urine due to megalin inhibition by cilastatin caused any harm which could be ameliorated by calcitriol administration. However, surveillance of plasma vitamin D level did not reveal significant drug-mediated change after injury or calcitriol administration. Plasma calcium was unchanged by calcitriol administration. When we investigated plasma calcitriol, although calcitriol in plasma rose in some animals, there was not a significant difference induced by administration of calcitriol, likely because of heterogeneity in baseline plasma calcitriol and perhaps because injury itself caused increased plasma calcitriol. This prompted the hypothesis that calcitriol+cilastatin sodium was nondifferent than cilastatin sodium alone.
+
+In the analysis that follows, tables presenting p values present values derived from post-hoc pairwise comparison with Sidak's correction.
+
+## Calcitriol and injury as measured by plasma creatine kinase
+
+Administration of calcitriol did not significantly alter plasma creatine kinase.
+
+```{r plasma creatine kinase, echo=FALSE,message=FALSE, results="show", warning=FALSE}
+
+# plasma creatine kinase --------------------------
+ylab<-"Plasma Creatine Kinase (IU/L)"
+title<-"plCK_calcil_cila.tiff"
+star_y<-1.4
+plCK<-M%>%select(x,plCK,x_units,weight_kg,animal)%>%
+  mutate(plCK=plCK,y=plCK, units_x=x_units, weight=weight_kg)
+plCK<-plCK%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_only_tx ~ "cila_alone",
+    animal%in%cal_tx ~ "calcil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+                   )
+                   ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%
+  filter((tx=="cila_alone")|(tx=="calcil"))%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+#plot
+
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=plCK)
+#print(summary(model))     
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+##emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+knitr::kable((summary(pairs_model)), format = "pipe", padding = 0,digits=3, col.names=table_column_names)
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=(ifelse(p.value<0.05,
+                                                 (ifelse(p.value<0.01, 
+                                                         (ifelse(p.value<0.001,"***","**")),
+                                                         "*")),"")))
+
+my<-max(summary(emm_model)$emmean)
+brackets_table<-pairs_to_significance_table(pair_summary,my)
+
+
+p<-column_scatter_errorbar_plot(plCK,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                p_brackets=FALSE,p_bracketsdata=brackets_table,
+                                bracket_nudge=0,
+                                xlabel="Time (h)",ylabel=ylab)
+
+
+#write the plot
+print(p)
+
+```
+
+## Calcitriol and plasma calcium
+
+Administration of calcitriol also did not significantly alter plasma calcium.
+
+```{r plasma calcium, echo=FALSE,message=FALSE, results="show", warning=FALSE}
+
+# ionized calcium --------------------------
+ylab<-"Plasma Ionized Calcium (mmol/L)"
+title<-"pliCa_calcil_cila.tiff"
+star_y<-1.4
+pliCa<-M%>%select(x,pliCa,x_units,weight_kg,animal)%>%
+  mutate(pliCa=pliCa,y=pliCa, units_x=x_units, weight=weight_kg)
+pliCa<-pliCa%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_only_tx ~ "cila_alone",
+    animal%in%cal_tx ~ "calcil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+                   )
+                   ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%
+  filter((tx=="cila_alone")|(tx=="calcil"))%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+#plot
+
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=pliCa)
+#print(summary(model))     
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+#emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+knitr::kable((summary(pairs_model)), format = "pipe", padding = 0,digits=3, col.names=table_column_names)
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=(ifelse(p.value<0.05,
+                                                 (ifelse(p.value<0.01, 
+                                                         (ifelse(p.value<0.001,"***","**")),
+                                                         "*")),"")))
+
+my<-max(summary(emm_model)$emmean)
+brackets_table<-pairs_to_significance_table(pair_summary,my)
+
+
+p<-column_scatter_errorbar_plot(pliCa,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                p_brackets=FALSE,p_bracketsdata=brackets_table,
+                                bracket_nudge=0,
+                                xlabel="Time (h)",ylabel=ylab)
+
+p<-p+ylim(0,2.2)
+
+#write the plot
+print(p)
+
+```
+
+## Effect of administered calcitriol on plasma calcitriol
+
+Next we tested (in a subset of animals) whether plasma calcitriol was increased by administered calcitriol. There was wide variation, but no statistically significant effect of calcitriol administration on calcitriol plasma level.
+
+```{r vitamin D assay, echo=FALSE,message=FALSE, results="show", warning=FALSE}
+title<-"plasma Calcitriol_calcil_vs_cila.tiff"
+ylab<-"Plasma Calcitriol (pg/mL)"
+
+plCal<-M%>%select(x,plCal,plCal_units,weight_kg,animal)%>%
+  mutate(y=plCal, units_y=plCal_units, weight=weight_kg)
+plCal<-plCal%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_only_tx ~ "cila_alone",
+    animal%in%cal_tx ~ "calcil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+                   )
+                   ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%
+  filter((tx=="cila_alone")|(tx=="calcil"))%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+
+
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=plCal)
+#print(summary(model))     
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+#emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="bh")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+knitr::kable((summary(pairs_model)), format = "pipe", padding = 0,digits=3, col.names=table_column_names)
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%rowwise()%>%mutate(star=pstar(p.value, write_out_ns=FALSE))%>%ungroup()
+
+my<-max(summary(emm_model)$emmean)
+brackets_table<-pairs_to_significance_table(pair_summary,my)
+
+p<-column_scatter_errorbar_plot(plCal,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                p_brackets=FALSE,p_bracketsdata=brackets_table,
+                                xlabel="Time (h)",ylabel=ylab)
+
+thisplot_left_legend<-c(0.13,0.95)
+p<-p+theme(legend.position = left_legend)
+print(p)
+          
+
+```
+
+## Calcitriol-induced nonrenal physiologic effect or noneffect
+
+Next we investigated effects of calcitriol+cilastatin versus cilastatin alone on heart rate, mean arterial pressure, urine output, and temperature.
+
+```{r cila-calcil effect on physiology HR, echo=FALSE,message=FALSE, results="show", warning=FALSE}
+#HR, MAP, Temp, UOP
+title<-"HR_calcil_vs_cila.tiff"
+ylab<-"Heart rate (bpm)"
+
+HR<-M%>%select(x,hr, hr_rollm,map_quality,x_units,hr_units,weight_kg,animal)%>%
+  mutate(HR=hr_rollm,y=HR, units_x=x_units, units_y=hr_units,weight=weight_kg)
+HR<-HR%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_only_tx ~ "cila_alone",
+    animal%in%cal_tx ~ "calcil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+                   )
+                   ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%
+  filter((tx=="cila_alone")|(tx=="calcil"))%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+#plot
+
+xlab<-"Time (h)"
+maxy<-setmaxY(max(HR$y))
+pY=maxy/20*19
+
+p<-ggplot(HR,aes(x=x,y=y,fill=tx,color=tx))+
+  scale_color_manual(values=redblue, aesthetics=c("color", "fill"))+
+  geom_boxplot(outlier.size = 0.5,aes(x=factor(x),fill=tx)) +
+  scale_x_discrete(breaks=timepoints) +
+  labs(x=xlab, y=ylab,tx="Treatment") +
+  plot_theme_wide+
+  ylim(0,maxy)
+thisplot_left_legend<-c(0.3,0.95)
+#p<-p+theme(legend.position = thisplot_left_legend)
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=HR)
+#print(summary(model))     
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+#emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="bh")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+knitr::kable((summary(pairs_model)), format = "pipe", padding = 0,digits=3, col.names=table_column_names)
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%rowwise()%>%mutate(star=pstar(p.value, write_out_ns=FALSE))%>%ungroup()
+
+#add stars to plot
+p<-p+annotate("text", x=pair_summary$x+1,y=pY,label=pair_summary$star, size=6)
+
+print(p)
+
+
+```
+
+6h after drug administration, heart rate was transiently lower in calcitriol-treated animals. The significance of this difference is supported by the trend in the prior 5 hours. The difference in means is about 11 beats per minute, which could have physiologic significance, it is about 10% of the mean heart rate.
+
+```{r cila-calcil effect on physiology MAP, echo=FALSE,message=FALSE, results="show", warning=FALSE}
+#HR, MAP, Temp, UOP
+title<-"MAP_calcil_vs_cila.tiff"
+ylab<-"Mean arterial pressure (mmHg)"
+
+MAP<-M%>%select(x,map_rollm,map_quality,x_units,map_units,weight_kg,animal,map_rollm)%>%
+  mutate(MAP=map_rollm,y=MAP,quality=map_quality, units_x=x_units, units_y=map_units,weight=weight_kg)
+MAP<-MAP%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_only_tx ~ "cila_alone",
+    animal%in%cal_tx ~ "calcil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+                   )
+                   ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%
+  filter((tx=="cila_alone")|(tx=="calcil"))%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+#plot
+
+xlab<-"Time (h)"
+p<-ggplot(MAP,aes(x=x,y=y,fill=tx,color=tx))+
+  scale_color_manual(values=redblue, aesthetics=c("color", "fill"))+
+  geom_boxplot(outlier.size = 0.5,aes(x=factor(x),fill=tx)) +
+  scale_x_discrete(breaks=timepoints) +
+  labs(x=xlab, y=ylab,tx="Treatment") +
+  plot_theme_wide+
+  ylim(0,100)
+thisplot_left_legend<-c(0.3,0.95)
+p<-p+theme(legend.position = thisplot_left_legend)
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=MAP)
+#print(summary(model))     
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+#emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="bh")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+knitr::kable((summary(pairs_model)), format = "pipe", padding = 0,digits=3, col.names=table_column_names)
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%rowwise()%>%mutate(star=pstar(p.value, write_out_ns=FALSE))%>%ungroup()
+
+#add stars to plot
+p<-p+annotate("text", x=pair_summary$x+1,y=90,label=pair_summary$star, size=6)
+
+p
+
+
+```
+
+Calcitriol did not alter blood pressure.
+
+```{r cila-calcil effect on physiology UOP, echo=FALSE,message=FALSE, results="show", warning=FALSE}
+
+title<-"UOP_calcil_vs_cila.tiff"
+ylab<-"UOP (mL/kg)"
+
+UOP<-M%>%select(x,uop_rate,uop_quality,x_units,uop_units,weight_kg,animal)%>%
+  mutate(UOP=uop_rate,y=UOP/weight_kg, units_x=x_units, units_y=uop_units,weight=weight_kg)
+UOP<-UOP%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_only_tx ~ "cila_alone",
+    animal%in%cal_tx ~ "calcil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+                   )
+                   ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%
+  filter((tx=="cila_alone")|(tx=="calcil"))%>%
+  filter(x%%1==0)%>%
+  filter((x>=1)&(x<=48))
+
+#plot
+
+xlab<-"Time (h)"
+maxy<-setmaxY(max(UOP$y))
+maxy<-0.5
+pY=maxy/20*17
+
+p<-ggplot(UOP,aes(x=x,y=y,fill=tx,color=tx))+
+  scale_color_manual(values=redblue, aesthetics=c("color", "fill"))+
+  geom_boxplot(outlier.size = 0.5,aes(x=factor(x),fill=tx)) +
+  scale_x_discrete(breaks=timepoints) +
+  labs(x=xlab, y=ylab,tx="Treatment") +
+  plot_theme_wide+
+  ylim(0,maxy)
+thisplot_left_legend<-c(0.3,0.95)
+#p<-p+theme(legend.position = thisplot_left_legend)
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=UOP)
+#print(summary(model))     
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+#emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="bh")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+knitr::kable((summary(pairs_model)), format = "pipe", padding = 0,digits=3, col.names=table_column_names)
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%rowwise()%>%mutate(star=pstar(p.value, write_out_ns=FALSE))%>%ungroup()
+
+#add stars to plot
+p<-p+annotate("text", x=pair_summary$x+1,y=pY,label=pair_summary$star, size=6)
+
+
+print(p)
+
+
+```
+
+Urine output was statistically different at 1, 41, and 42h. The mean difference in urine output at 1h was 0.02 mL/kg, or about 1 mL for the hour. This is a clinically/physiologically nonrelevant difference. At 41 and 42 hours, the difference was 0.01 mL/kg.
+
+```{r cila-calcil effect on physiology Temperature, echo=FALSE,message=FALSE, results="show", warning=FALSE}
+#HR, MAP, Temp, UOP
+title<-"TEMP_calcil_vs_cila.tiff"
+ylab<-"Temperature (C)"
+
+TEMP<-M%>%select(x,temp_rollm,temp_quality,x_units,temp_units,weight_kg,animal)%>%
+  mutate(TEMP=temp_rollm,y=TEMP, units_x=x_units, units_y=temp_units,weight=weight_kg)
+TEMP<-TEMP%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_only_tx ~ "cila_alone",
+    animal%in%cal_tx ~ "calcil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+                   )
+                   ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%
+  filter((tx=="cila_alone")|(tx=="calcil"))%>%
+  filter(x%%1==0)%>%
+  filter((x>=1)&(x<=48))
+
+#plot
+
+xlab<-"Time (h)"
+maxy<-setmaxY(max(TEMP$y))
+pY=maxy/20*19
+
+p<-ggplot(TEMP,aes(x=x,y=y,fill=tx,color=tx))+
+  scale_color_manual(values=redblue, aesthetics=c("color", "fill"))+
+  geom_boxplot(outlier.size = 0.5,aes(x=factor(x),fill=tx)) +
+  scale_x_discrete(breaks=timepoints) +
+  labs(x=xlab, y=ylab,tx="Treatment") +
+  plot_theme_wide+
+  ylim(30,maxy)
+thisplot_left_legend<-c(0.3,0.95)
+#p<-p+theme(legend.position = thisplot_left_legend)
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=TEMP)
+#print(summary(model))     
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+#emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="bh")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+knitr::kable((summary(pairs_model)), format = "pipe", padding = 0,digits=3, col.names=table_column_names)
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%rowwise()%>%mutate(star=pstar(p.value, write_out_ns=FALSE))%>%ungroup()
+
+#add stars to plot
+p<-p+annotate("text", x=pair_summary$x+1,y=pY,label=pair_summary$star, size=6)
+
+print(p)
+
+
+```
+
+Temperature was not influenced by calcitriol administration.
+
+## Calcitriol effect on renal function: serum creatinine
+
+Calcitriol had no effect on creatinine.
+
+```{r plasma creatinine ,echo=FALSE,message=FALSE, results="show", warning=FALSE}
+
+# plasma creatinine --------------------------
+ylab<-"Serum Creatinine (mmol/L)"
+title<-"plCR_calcil_cila_alone.tiff"
+plCR<-M%>%select(x,plCR,x_units,weight_kg,animal)%>%
+  mutate(y=plCR, units_x=x_units, weight=weight_kg)
+plCR<-plCR%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_only_tx ~ "cila_alone",
+    animal%in%cal_tx ~ "calcil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+                   )
+                   ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%
+  filter((tx=="cila_alone")|(tx=="calcil"))%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+#plot
+
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=plCR)
+#print(summary(model))     
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+#emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+knitr::kable((summary(pairs_model)), format = "pipe", padding = 0,digits=3, col.names=table_column_names)
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=(ifelse(p.value<0.05,
+                                                 (ifelse(p.value<0.01, 
+                                                         (ifelse(p.value<0.001,"***","**")),
+                                                         "*")),"")))
+
+my<-max(summary(emm_model)$emmean)
+brackets_table<-pairs_to_significance_table(pair_summary,my)
+
+
+p<-column_scatter_errorbar_plot(plCR,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                p_brackets=FALSE,p_bracketsdata=brackets_table,
+                                bracket_nudge=0,
+                                xlabel="Time (h)",ylabel=ylab)
+
+p<-p+ylim(0,2.2)
+thisplot_left_legend<-c(0.13,0.95)
+p<-p+theme(legend.position = left_legend)
+#write the plot
+print(p)
+
+```
+
+## Calcitriol effect on renal function: blood urea nitrogen
+
+Calcitriol did not affect blood urea nitrogen; interestingly the trend, if any, is opposite that of serum creatinine.
+
+```{r plasma blood urea nitrogen ,echo=FALSE,message=FALSE, results="show", warning=FALSE}
+
+# plasma urea nitrogen --------------------------
+ylab<-"Blood urea Nitrogen (mmol/L)"
+title<-"plBUN_calcil_cila_alone.tiff"
+plBUN<-M%>%select(x,plBUN,x_units,weight_kg,animal)%>%
+  mutate(y=plBUN, units_x=x_units, weight=weight_kg)
+plBUN<-plBUN%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_only_tx ~ "cila_alone",
+    animal%in%cal_tx ~ "calcil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+                   )
+                   ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%
+  filter((tx=="cila_alone")|(tx=="calcil"))%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+#plot
+
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=plBUN)
+#print(summary(model))     
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+#emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+knitr::kable((summary(pairs_model)), format = "pipe", padding = 0,digits=3, col.names=table_column_names)
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=(ifelse(p.value<0.05,
+                                                 (ifelse(p.value<0.01, 
+                                                         (ifelse(p.value<0.001,"***","**")),
+                                                         "*")),"")))
+
+my<-max(summary(emm_model)$emmean)
+brackets_table<-pairs_to_significance_table(pair_summary,my)
+
+
+p<-column_scatter_errorbar_plot(plBUN,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                p_brackets=FALSE,p_bracketsdata=brackets_table,
+                                bracket_nudge=0,
+                                xlabel="Time (h)",ylabel=ylab)
+
+
+#write the plot
+print(p)
+
+```
+
+## Calcitriol effect on renal function: potassium
+
+Calcitriol administration did not affect plasma potassium.
+
+```{r plasma potassium ,echo=FALSE,message=FALSE, results="show", warning=FALSE}
+
+# plasma potassium --------------------------
+ylab<-"Plasma potassium (mmol/L)"
+title<-"plK_calcil_cila_alone.tiff"
+plK<-M%>%select(x,plK,x_units,weight_kg,animal)%>%
+  mutate(y=plK, units_x=x_units, weight=weight_kg)
+plK<-plK%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_only_tx ~ "cila_alone",
+    animal%in%cal_tx ~ "calcil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+                   )
+                   ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%
+  filter((tx=="cila_alone")|(tx=="calcil"))%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+#plot
+
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=plK)
+#print(summary(model))     
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+#emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+knitr::kable((summary(pairs_model)), format = "pipe", padding = 0,digits=3, col.names=table_column_names)
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=(ifelse(p.value<0.05,
+                                                 (ifelse(p.value<0.01, 
+                                                         (ifelse(p.value<0.001,"***","**")),
+                                                         "*")),"")))
+
+my<-max(summary(emm_model)$emmean)
+brackets_table<-pairs_to_significance_table(pair_summary,my)
+
+
+p<-column_scatter_errorbar_plot(plK,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                p_brackets=FALSE,p_bracketsdata=brackets_table,
+                                bracket_nudge=0,
+                                xlabel="Time (h)",ylabel=ylab)
+
+
+#write the plot
+print(p)
+
+```
+
+## Calcitriol effect on renal function: GFR
+
+Lastly, administered calcitriol had no effect on 6, 24, or 48h GFR.
+
+```{r  GFR ,echo=FALSE,message=FALSE, results="show", warning=FALSE}
+
+# plasma potassium --------------------------
+ylab<-"GFR"
+title<-"GFR_calcil_cila_alone.tiff"
+GFR<-M%>%select(x,gfr,x_units,weight_kg,animal)%>%
+  mutate(y=gfr, units_x=x_units, weight=weight_kg)
+GFR<-GFR%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_only_tx ~ "cila_alone",
+    animal%in%cal_tx ~ "calcil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+                   )
+                   ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%
+  filter((tx=="cila_alone")|(tx=="calcil"))%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+#plot
+
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=GFR)
+#print(summary(model))     
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+#emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+knitr::kable((summary(pairs_model)), format = "pipe", padding = 0,digits=3, col.names=table_column_names)
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=(ifelse(p.value<0.05,
+                                                 (ifelse(p.value<0.01, 
+                                                         (ifelse(p.value<0.001,"***","**")),
+                                                         "*")),"")))
+
+my<-max(summary(emm_model)$emmean)
+brackets_table<-pairs_to_significance_table(pair_summary,my)
+
+
+p<-column_scatter_errorbar_plot(GFR,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                p_brackets=FALSE,p_bracketsdata=brackets_table,
+                                bracket_nudge=0,
+                                xlabel="Time (h)",ylabel=ylab)
+
+
+#write the plot
+print(p)
+
+```

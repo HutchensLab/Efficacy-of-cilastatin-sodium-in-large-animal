@@ -1,0 +1,55 @@
+---
+title: "Overall Survival"
+author: "Michael Hutchens"
+date: "`r Sys.Date()`"
+output:
+  word_document:
+    reference_docx: "word-styles-reference-01.docx"
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("paper_common.R")
+library (survival)
+library(survminer)
+
+```
+
+## Survival plot and analysis
+
+```{r survive, echo=FALSE, results="show"}
+
+
+
+
+# overall survival analysis (time to death) --------------------------------------------------
+Mall<-get_master(paste0(DATAHUB,"/DOD2_ALL.unfiltered.xlsx"))
+surv.time<-Mall %>% select(animal, last_hr, model, cilastatin) %>% filter(!is.na(last_hr) & last_hr>0 &!animal%in%excluded &!animal%in%cila5x_tx) %>% mutate(alive.hrs=as.numeric(last_hr))  %>% mutate(cil_tx=(cilastatin>0))
+surv.time$outcome<-1
+surv.time<-surv.time %>% mutate(outcome=ifelse(alive.hrs<48,1,0))
+
+surv.time<-transform(surv.time, last_hr=as.numeric(last_hr), model=as.factor(model))
+survdata<-with(surv.time, Surv(alive.hrs, outcome))
+surv.fit<-survfit(survdata~model, data=surv.time)
+plot(surv.fit, xlab="hours", main = 'Time to Death') 
+ggsurvplot(surv.fit, data=surv.time, pval = TRUE, xlab="Time to Death", ylab="Proportion Surviving")
+
+# drug-influenced survival analysis (time to death) --------------------------------------------------
+
+surv.time<-M %>% select(animal, last_hr, model, cilastatin) %>% filter(!is.na(last_hr) & last_hr>0 &!animal%in%excluded) %>% mutate(alive.hrs=as.numeric(last_hr))  %>% mutate(cil_tx=(cilastatin>0))
+surv.time$outcome<-1
+surv.time<-surv.time %>% mutate(outcome=ifelse(alive.hrs<48,1,0))
+
+surv.time<-transform(surv.time, last_hr=as.numeric(last_hr), cil_tx= as.factor(cil_tx))
+#select single model
+surv.time<-surv.time %>% filter(model=="ff")
+
+survdata<-with(surv.time, Surv(alive.hrs, outcome))
+surv.fit<-survfit(survdata~cil_tx, data=surv.time)
+ggsurvplot(surv.fit, data=surv.time, pval = TRUE, xlab="Time to Death", ylab="Proportion Surviving")
+
+
+
+```

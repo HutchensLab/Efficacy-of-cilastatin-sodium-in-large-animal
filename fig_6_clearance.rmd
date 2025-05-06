@@ -1,0 +1,385 @@
+---
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+header-includes:
+  - \usepackage{titling}
+  - \pretitle{\begin{flushleft}}
+  - \posttitle{\end{flushleft}}
+---
+
+
+```{r setup, include=FALSE,warning=FALSE,  message=FALSE}
+library(ragg)
+knitr::opts_chunk$set(echo = TRUE,dev = "ragg_png", cache=TRUE) 
+WRITE_PLOTS<<-TRUE
+```
+
+```{r includes,warning=FALSE,  message=FALSE}
+library(here)
+code<-here("R_script")
+data<-here("Data")
+figure_parts<-here("figure_parts")
+source(here(code,"paper_common.R"))
+source(here(code,"plot_common.R"))
+emm_sig_summary_paper<-emm_sig_summary_paper
+
+```
+
+```{r paper_heading,warning=FALSE,  message=FALSE, echo=FALSE}
+
+a<-("From:\n")
+b<-(read_file(here("title.txt")))
+c<-(read_file(here("authors.txt")))
+
+title<-paste("Analysis underlying figure 6 from ",b)
+authors<-paste("By: ",c)
+
+```
+
+
+## Creatine Kinase (CK)
+
+```{r CK,warning=FALSE,  message=FALSE}
+ylab<-"Plasma CK (IU/L)*1000"
+title<-"CK_cil_veh.tiff"
+
+ck<-M%>%select(x,plCK,x_units,plCK_units,weight_kg,animal)%>%
+  mutate(ck=plCK,y=plCK/1000, units_x=x_units, units_y=plCK_units,weight=weight_kg)
+ck<-ck%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ "no impact",
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))%>%
+  mutate(tx=fct_relevel(tx, "cil",after=Inf))
+
+#statistical analysis - lmer followed by adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=ck)
+summary(model)       
+model2<-lmer(y~tx*x+(1|animal),data=ck)
+summary(model2)
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+spairs
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=pstar_horiz(p.value))
+
+
+maxy<-setmaxY(max(ck$y))
+brackets_table<-pairs_to_significance_table(pair_summary,maxy)
+
+
+p<-column_scatter_errorbar_plot(ck,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=FALSE,
+                                xlabel="Time (h)",ylabel=ylab)
+thisplot_left_legend<-c(0.35,0.95)
+p<-p+theme(legend.position = thisplot_left_legend)
+p
+#write the plot
+
+if(WRITE_PLOTS){ ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+#summary statistics for significant values formatted to place in the text of the paper
+emm_sig_summary_paper(ck,pair_summary,emm_means)
+
+```
+
+
+## Plasma myoglobin (plMB)
+
+```{r MB,warning=FALSE,  message=FALSE}
+ylab<-"Plasma Mb (ng/mL)"
+title<-"plMb_cil_veh.tiff"
+
+mb<-M%>%select(x,plMB,x_units,,weight_kg,animal)%>%
+  mutate(y=plMB, units_x=x_units,weight=weight_kg)
+mb<-mb%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ "no impact",
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))%>%
+  mutate(tx=fct_relevel(tx, "cil",after=Inf))
+
+#statistical analysis - lmer followed by adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=mb)
+summary(model)       
+model2<-lmer(y~tx*x+(1|animal),data=mb)
+summary(model2)
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+spairs
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=pstar_horiz(p.value))
+
+
+maxy<-setmaxY(max(mb$y))
+brackets_table<-pairs_to_significance_table(pair_summary,maxy)
+
+
+p<-column_scatter_errorbar_plot(mb,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=TRUE,p_bracketsdata=brackets_table,bracket_nudge=-10000,
+                                xlabel="Time (h)",ylabel=ylab)
+thisplot_left_legend<-c(0.35,0.95)
+p<-p+theme(legend.position = thisplot_left_legend)
+p
+#write the plot
+
+if(WRITE_PLOTS){ ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+#summary statistics for significant values formatted to place in the text of the paper
+emm_sig_summary_paper(mb,pair_summary,emm_means)
+
+```
+
+## Urine myoglobin (urMB)/Plasma myoglobin (plMB)
+
+```{r upMB,warning=FALSE,  message=FALSE}
+ylab<-"Urine/Plasma Mb"
+title<-"urplMb_cil_veh.tiff"
+
+mb<-M%>%select(x,urMB,plMB,x_units,uop_rate,weight_kg,animal)%>%
+  mutate(y=(urMB*uop_rate)/plMB, units_x=x_units,weight=weight_kg)
+mb<-mb%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ "no impact",
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=2)&(x<=48))%>%
+  mutate(tx=fct_relevel(tx, "cil",after=Inf))
+
+#statistical analysis - lmer followed by adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=mb)
+summary(model)       
+model2<-lmer(y~tx*x+(1|animal),data=mb)
+summary(model2)
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+spairs
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=pstar_horiz(p.value))
+
+
+maxy<-setmaxY(max(mb$y))
+brackets_table<-pairs_to_significance_table(pair_summary,maxy)
+
+
+p<-column_scatter_errorbar_plot(mb,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=TRUE,p_bracketsdata=brackets_table,bracket_nudge=-0.95,
+                                xlabel="Time (h)",ylabel=ylab)
+#thisplot_left_legend<-c(0.35,0.95)
+#p<-p+theme(legend.position = thisplot_left_legend)
+p
+#write the plot
+
+if(WRITE_PLOTS){ ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+#summary statistics for significant values formatted to place in the text of the paper
+emm_sig_summary_paper(mb,pair_summary,emm_means)
+
+```
+
+## Urine porphyrin (urPOR)/Plasma porphyrin (plPOR)
+
+```{r upPOR,warning=FALSE,  message=FALSE}
+ylab<-"Urine Por/Plasma Mb"
+title<-"urplPOR_cil_veh.tiff"
+
+por<-M%>%select(x,urPOR,plMB,x_units,uop_rate,weight_kg,animal)%>%
+  mutate(y=(urPOR*uop_rate)/plMB, units_x=x_units,weight=weight_kg)
+por<-por%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ "no impact",
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=2)&(x<=48))%>%
+  mutate(tx=fct_relevel(tx, "cil",after=Inf))
+
+#statistical analysis - lmer followed by adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=por)
+summary(model)       
+model2<-lmer(y~tx*x+(1|animal),data=por)
+summary(model2)
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+spairs
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=pstar_horiz(p.value))
+
+
+maxy<-setmaxY(max(por$y))
+brackets_table<-pairs_to_significance_table(pair_summary,maxy)
+
+
+p<-column_scatter_errorbar_plot(por,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=TRUE,p_bracketsdata=brackets_table,bracket_nudge=-1.0998,
+                                xlabel="Time (h)",ylabel=ylab)
+#thisplot_left_legend<-c(0.35,0.95)
+#p<-p+theme(legend.position = thisplot_left_legend)
+p
+#write the plot
+
+if(WRITE_PLOTS){ ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+#summary statistics for significant values formatted to place in the text of the paper
+emm_sig_summary_paper(por,pair_summary,emm_means)
+
+
+
+
+```
+
+## Total urinary porphyrin excretion
+
+```{r porphyrin auc}
+ylab<-"48h Porphyrin Excretion (AUC)"
+title<-"urpor_AUC_cil_veh.tiff"  
+por<-M%>%select(x,urPOR,plMB,x_units,uop_rate,weight_kg,animal)%>%
+  mutate(y=(urPOR*uop_rate)/plMB, units_x=x_units,weight=weight_kg)
+por<-por%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ "no impact",
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=2)&(x<=48))%>%
+  mutate(tx=fct_relevel(tx, "cil",after=Inf))
+por_aucs<-por%>%group_by(animal)%>%mutate(PorExc=urPOR*uop_rate/plMB)%>%ungroup()
+por_aucs<-calc_auc(por_aucs, target="PorExc")%>%select(animal,tx, PorExc_auc)%>%filter(!is.na(PorExc_auc))%>%distinct()
+por_aucs<-por_aucs%>%mutate(tx=fct_relevel(tx, "cil",after=Inf))
+            
+por_t<-t.test(PorExc_auc~tx,data=por_aucs)   
+por_aucs%>%group_by(tx)%>%summarize(mean_auc=mean(PorExc_auc), sd_auc=sd(PorExc_auc))
+
+#percent reduction
+por_aucs<-por_aucs%>%mutate(por_aucs_mean_veh=mean(PorExc_auc[tx=="veh"]))
+por_aucs<-por_aucs%>%rowwise()%>%mutate(pct_inc_por_auc=(PorExc_auc-por_aucs_mean_veh)/por_aucs_mean_veh*100)
+
+por_aucs%>%group_by(tx)%>%summarize(mincrease=mean(pct_inc_por_auc), sd=sd(pct_inc_por_auc))
+
+
+
+p<-column_scatter_errorbar_plot(por_aucs,x=tx,y=PorExc_auc, groupvar=tx,themevar=plot_theme_squareish2,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=FALSE,
+                                xlabel="Treatment",ylabel=ylab)
+p<-p+geom_signif(xmin=1,
+                                    xmax=2,
+                                   y_position=0.0025,
+                                   annotation=paste0("p= ",as.character(round(por_t$p.value,3))),
+                                   tip_length = 0.025,
+                                    color="black",
+                                    vjust=-1)
+
+p
+
+if(WRITE_PLOTS){ ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+por_t
+```
+
+
+## Total urinary myoglobin excretion
+
+```{r porphyrin auc}
+ylab<-"48h Myoglobin Excretion (AUC)"
+title<-"urmb_AUC_cil_veh.tiff"  
+por<-M%>%select(x,urMB,plMB,x_units,uop_rate,weight_kg,animal)%>%
+  mutate(y=(urMB*uop_rate)/plMB, units_x=x_units,weight=weight_kg)
+por<-por%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ "no impact",
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=2)&(x<=48))%>%
+  mutate(tx=fct_relevel(tx, "cil",after=Inf))
+por_aucs<-por%>%group_by(animal)%>%mutate(MBExc=urMB*uop_rate/plMB)%>%ungroup()
+por_aucs<-calc_auc(por_aucs, target="MBExc")%>%select(animal,tx, MBExc_auc)%>%filter(!is.na(MBExc_auc))%>%distinct()
+por_aucs<-por_aucs%>%mutate(tx=fct_relevel(tx, "cil",after=Inf))
+            
+por_t<-t.test(MBExc_auc~tx,data=por_aucs)   
+
+
+p<-column_scatter_errorbar_plot(por_aucs,x=tx,y=MBExc_auc, groupvar=tx,themevar=plot_theme_squareish2,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=FALSE,
+                                xlabel="Treatment",ylabel=ylab)
+p<-p+geom_signif(xmin=1,
+                                    xmax=2,
+                                   y_position=0.45,
+                                   annotation=paste0("p= ",as.character(round(por_t$p.value,3))),
+                                   tip_length = 0.025,
+                                    color="black",
+                                    vjust=-1)
+
+p
+
+if(WRITE_PLOTS){ ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+```

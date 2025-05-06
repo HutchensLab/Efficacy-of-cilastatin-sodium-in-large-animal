@@ -1,0 +1,1384 @@
+---
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+header-includes:
+  - \usepackage{titling}
+  - \pretitle{\begin{flushleft}}
+  - \posttitle{\end{flushleft}}
+---
+
+```{r setup, include=FALSE,warning=FALSE,  message=FALSE}
+library(ragg)
+knitr::opts_chunk$set(echo = TRUE,dev = "ragg_png", cache=TRUE) 
+WRITE_PLOTS<<-TRUE
+```
+
+```{r includes,warning=FALSE,  message=FALSE}
+library(here)
+code<-here("R_script")
+data<-here("Data")
+figure_parts<-here("figure_parts")
+source(here(code,"paper_common.R"))
+source(here(code,"plot_common.R"))
+emm_sig_summary_paper<-emm_sig_summary_paper
+
+```
+
+```{r paper_heading,warning=FALSE,  message=FALSE, echo=FALSE}
+
+a<-("From:\n")
+b<-(read_file(here("title.txt")))
+c<-(read_file(here("authors.txt")))
+
+title<-paste("Analysis underlying figure 5 from ",b)
+authors<-paste("By: ",c)
+
+```
+
+---
+title: "`r title`"
+author: "`r authors`"
+header-includes:
+  - \usepackage{titling}
+  - \pretitle{\begin{flushleft}}
+  - \posttitle{\end{flushleft}}
+---
+
+## GFR
+
+```{r gfr,warning=FALSE,  message=FALSE}
+ylab<-"GFR (mL/min)"
+title<-"GFR_cil_veh.tiff"
+gfr<-M%>%select(x,gfr,x_units,gfr_units,weight_kg,animal)%>%
+  mutate(gfr=gfr,y=gfr, units_x=x_units, units_y=gfr_units,weight=weight_kg)
+gfr<-gfr%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+gfr<-gfr%>%mutate(tx=fct_relevel(tx,"veh", "cil"))
+gfr<-gfr%>%mutate(tx=relevel(tx,ref="veh"))
+gfr<-droplevels(gfr)
+
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=gfr)
+summary(model)     
+anova(model)
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+spairs
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=pstar(p.value))
+maxy<-setmaxY(max(gfr$y))
+brackets_table<-pairs_to_significance_table(pair_summary,maxy=maxy)
+
+
+p<-column_scatter_errorbar_plot(gfr,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,                                
+                                p_brackets=TRUE,p_bracketsdata=brackets_table,
+                                xlabel="Time (h)",ylabel=ylab)
+
+thisplot_left_legend<-c(0.3,0.95)
+p<-p+theme(legend.position = thisplot_left_legend)
+p<-p+ylim(0,160)
+
+p<-p+geom_signif(xmin=2.75,
+                                    xmax=3.25,
+                                   y_position=132,
+                                   annotation="p=0.024",
+                                   tip_length = 0.025,
+                                    color="black",
+                                    vjust=-1)
+
+p
+#write the plot
+if(WRITE_PLOTS){ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+#summary statistics for significant values formatted to place in the text of the paper
+emm_sig_summary_paper(gfr,brackets_table,emm_means, showall=TRUE)
+
+
+
+```
+
+## Plasma Creatinine
+
+```{r creatinine, warning=FALSE, message=FALSE}
+# sCr: AKI --------------------------
+ylab<-"Plasma Creatinine (mmol/L)"
+title<-"plCr_cil_veh.tiff"
+cr<-M%>%select(x,plCR,x_units,plCR_units,weight_kg,animal,daylen,model)%>%
+  mutate(cr=plCR,y=plCR, units_x=x_units, units_y=plCR_units,weight=weight_kg,model=model)
+cr<-cr%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+
+cr<-cr%>%mutate(tx=fct_relevel(tx,"veh", "cil"))
+cr<-cr%>%mutate(tx=relevel(tx,ref="veh"))
+cr<-droplevels(cr)
+
+
+
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|daylen),data=cr)
+summary(model)   
+anova(model)
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+spairs
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=pstar_horiz(p.value))
+
+
+maxy<-setmaxY(max(cr$y), round=FALSE)
+brackets_table<-pairs_to_significance_table(pair_summary,maxy)
+
+
+p<-column_scatter_errorbar_plot(cr,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=TRUE,p_bracketsdata=brackets_table,bracket_nudge=-4,
+                                xlabel="Time (h)",ylabel=ylab)
+thisplot_left_legend<-c(0.35,0.95)
+p<-p+theme(legend.position = thisplot_left_legend)
+p
+#write the plot
+
+if(WRITE_PLOTS){ ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+#summary statistics for significant values formatted to place in the text of the paper
+emm_sig_summary_paper(lac,pair_summary,emm_means, showall=TRUE)
+```
+
+## Plasma Urea Nitrogen
+
+```{r bun, warning=FALSE, message=FALSE}
+# sCr: AKI --------------------------
+ylab<-"BUN (mmol/L)"
+title<-"plBUN_cil_veh.tiff"
+bun<-M%>%select(x,plBUN,x_units,weight_kg,animal,daylen,model)%>%
+  mutate(bun=plBUN,y=plBUN, units_x=x_units,weight=weight_kg,model=model)
+bun<-bun%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+
+bun<-bun%>%mutate(tx=fct_relevel(tx,"veh", "cil"))
+bun<-bun%>%mutate(tx=relevel(tx,ref="veh"))
+bun<-droplevels(bun)
+
+
+
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|daylen),data=bun)
+summary(model)   
+anova(model)
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+spairs
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=pstar_horiz(p.value))
+
+
+maxy<-setmaxY(max(bun$y), round=FALSE)
+brackets_table<-pairs_to_significance_table(pair_summary,maxy)
+
+
+p<-column_scatter_errorbar_plot(bun,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=TRUE,p_bracketsdata=brackets_table,bracket_nudge=-30,
+                                xlabel="Time (h)",ylabel=ylab)
+thisplot_left_legend<-c(0.35,0.95)
+p<-p+theme(legend.position = thisplot_left_legend)
+p
+#write the plot
+
+if(WRITE_PLOTS){ ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+#summary statistics for significant values formatted to place in the text of the paper
+emm_sig_summary_paper(lac,pair_summary,emm_means, showall=TRUE)
+```
+
+
+##  time to recovery to 70% of maximal creatinine
+
+
+``` {r time to creat recovery, warning=FALSE, message=FALSE}
+
+cr<-M%>%select(x,plCR,x_units,plCR_units,weight_kg,animal,daylen)%>%
+  mutate(cr=plCR,y=plCR, units_x=x_units, units_y=plCR_units,weight=weight_kg)
+cr<-cr%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=-1)&(x<=48))
+
+thresh=.7
+
+
+
+cr<-cr%>%group_by(animal)%>%
+  mutate(base_cr=plCR[x==-1])%>%
+  mutate(basenormed_plCR=plCR/base_cr)%>%
+  mutate(max_cr=max(basenormed_plCR, na.rm=TRUE))%>%
+  mutate(h_max_cr=min(x[basenormed_plCR==max_cr]))%>%
+  rowwise()%>%
+  mutate(cr_lte_thresh_x_max=basenormed_plCR<thresh*max_cr)%>%
+  mutate(recovery_cr=cr_lte_thresh_x_max&(x>h_max_cr))%>%
+  ungroup()
+
+
+
+kcr<-cr%>%select(animal,x,tx,base_cr,plCR,basenormed_plCR,max_cr,cr_lte_thresh_x_max,h_max_cr,recovery_cr, max_cr)
+kcr<-kcr%>%group_by(animal)%>%
+  mutate(h_recovery_cr=ifelse(mean(recovery_cr)>0,min(x[recovery_cr==TRUE]),49))%>%
+  mutate(outcome=ifelse(h_recovery_cr<49,1,0))
+kcr.surv<-kcr%>%select(animal,tx,h_recovery_cr,outcome)%>%distinct()
+
+library (survival)
+library(survminer)
+k.surv.fit<-survfit(Surv(h_recovery_cr, outcome, type='right')~tx,data=kcr.surv)
+
+
+p<-ggsurvplot(k.surv.fit, data=kcr.surv,,censor=TRUE, pval = TRUE, pval.method=TRUE,
+           title ="",xlab="Time to Recovery", ylab="Proportion without recovery",
+           palette =sham_veh,
+           risk.table = TRUE,
+           tables.height = 0.2,
+           tables.theme = theme_cleantable())
+
+p
+
+
+
+
+
+
+if(WRITE_PLOTS){ 
+  tiff(title)
+  tiff(here(figure_parts,title))
+  print(p)
+  dev.off()
+  ggsave(filename=here(figure_parts,title),plot=p$plot,dpi=300,units="in")
+}
+
+```
+
+## Rapid recovery/non-recovery to baseline creatinine
+
+## mean recovery as %maximal overall
+``` {r creat 70 pct recovery, warning=FALSE, message=FALSE}
+
+cr<-M%>%select(x,plCR,x_units,plCR_units,weight_kg,animal,last_hr)%>%
+  mutate(cr=plCR,y=plCR, units_x=x_units, units_y=plCR_units,weight=weight_kg)
+cr<-cr%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=-1)&(x<=48))
+
+#cr<-droplevels(cr)
+cr<-cr%>%group_by(animal)%>%
+  mutate(base_cr=plCR[x==0])%>% #baseline here is "hospital admission" not actual baseline
+  mutate(cr48=plCR[x==max(x)])%>%
+  mutate(maxCR=max(plCR,na.rm=T))%>%
+  mutate(frac_cr48_max=cr48/maxCR)%>%
+  ungroup()
+
+frac48max<-cr%>%group_by(animal)%>%select(tx,frac_cr48_max)%>%distinct()%>%ungroup()
+
+ggplot(frac48max,aes(x=tx,y=frac_cr48_max))+geom_point()
+
+frac48max%>%group_by(tx)%>%reframe(mean=mean(frac_cr48_max),sd=sd(frac_cr48_max))
+
+
+```
+
+##  recovery to 70% of maximal creatinine
+``` {r creat 70 pct recovery, warning=FALSE, message=FALSE}
+
+cr<-M%>%select(x,plCR,x_units,plCR_units,weight_kg,animal,last_hr)%>%
+  mutate(cr=plCR,y=plCR, units_x=x_units, units_y=plCR_units,weight=weight_kg)
+cr<-cr%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=-1)&(x<=48))
+
+
+thresh=1.5
+max_thresh=0.7
+
+cr<-cr%>%group_by(animal)%>%
+  mutate(base_cr=plCR[x==0])%>% #baseline here is "hospital admission" not actual baseline
+  mutate(cr48=plCR[x==max(x)])%>%
+  mutate(frac_cr48_base=cr48/base_cr)%>%
+  mutate(maxCR=max(plCR,na.rm=T))%>%
+  mutate(cr48_lte_thresh_x_base=cr48<=thresh*base_cr)%>%
+  mutate(cr48_lte_thresh_x_max=cr48<=max_thresh*maxCR)%>%
+  mutate(frac_cr48_max=cr48/maxCR)%>%
+  ungroup()
+
+last_cr<-cr%>%group_by(animal)%>%mutate(plCRisna=is.na(plCR))%>%select(animal,x,plCR,plCRisna)
+
+cr<-cr%>%group_by(animal)%>%
+  mutate(base_cr=plCR[x==0])%>% #baseline here is "hospital admission" not actual baseline
+  mutate(cr48=plCR[x==max(x)])%>%
+  mutate(maxCR=max(plCR,na.rm=T))%>%
+  mutate(frac_cr48_max=cr48/maxCR)%>%
+  ungroup()
+
+rrcr<-cr%>%group_by(animal)%>%reframe(animal,tx,base_cr,cr48,maxCR,frac_cr48_base,frac_cr48_max,cr48_lte_thresh_x_base,cr48_lte_thresh_x_max)%>%distinct
+
+rrcr<-droplevels(rrcr)
+pcr<-table(rrcr$tx,rrcr$cr48_lte_thresh_x_max)
+
+chisq.test(pcr,simulate.p.value = T,B=100000)
+rownames(pcr)<-c("cil","veh")
+colnames(pcr)<-c("Nonrecovery","Recovery")
+pcr 
+
+percent_cil_recovered<-pcr[1,2]/(pcr[1,1]+pcr[1,2])*100
+percent_veh_recovered<-pcr[2,2]/(pcr[2,1]+pcr[2,2])*100
+
+cat("Percent recovered to ", max_thresh, " *maximal creatinine was ", percent_cil_recovered," in cil, and ", percent_veh_recovered," in veh.") 
+
+cat("Percent nonrecovered to ", max_thresh, " *maximal creatinine was ", 100-percent_cil_recovered," in cil, and ", 100-percent_veh_recovered," in veh.") 
+```
+##  full recovery to baseline or admission creatinine
+``` {r creat full recovery, warning=FALSE, message=FALSE}
+
+cr<-M%>%select(x,plCR,x_units,plCR_units,weight_kg,animal,last_hr)%>%
+  mutate(cr=plCR,y=plCR, units_x=x_units, units_y=plCR_units,weight=weight_kg)
+cr<-cr%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=-1)&(x<=48))
+
+
+thresh=1
+max_thresh=0.7
+
+cr<-cr%>%group_by(animal)%>%
+  mutate(admission_cr=plCR[x==0])%>% #baseline here is "hospital admission" not actual baseline
+  mutate(base_cr=plCR[x==-1])%>% #baseline here is "hospital admission" not actual baseline
+  mutate(cr48=plCR[x==max(x)])%>%
+  mutate(frac_cr48_base=cr48/base_cr)%>%
+  mutate(maxCR=max(plCR,na.rm=T))%>%
+  mutate(cr48_lte_thresh_x_base=cr48<=thresh*base_cr)%>%
+  mutate(cr48_lte_thresh_x_admission=cr48<=thresh*admission_cr)%>%
+  ungroup()
+
+
+cr<-cr%>%group_by(animal)%>%
+  mutate(base_cr=plCR[x==0])%>% #baseline here is "hospital admission" not actual baseline
+  mutate(cr48=plCR[x==max(x)])%>%
+  mutate(maxCR=max(plCR,na.rm=T))%>%
+  mutate(frac_cr48_max=cr48/maxCR)%>%
+  ungroup()
+
+rrcr<-cr%>%group_by(animal)%>%reframe(animal,tx,base_cr,cr48,maxCR,frac_cr48_base,frac_cr48_max,cr48_lte_thresh_x_base,cr48_lte_thresh_x_admission)%>%distinct
+
+rrcr<-droplevels(rrcr)
+p_fullbase_cr<-table(rrcr$tx,rrcr$cr48_lte_thresh_x_base)
+p_fulladmit_cr<-table(rrcr$tx,rrcr$cr48_lte_thresh_x_admission)
+
+
+chisq.test(p_fullbase_cr,simulate.p.value = T,B=10000)
+chisq.test(p_fulladmit_cr,simulate.p.value = T,B=10000)
+rownames(p_fullbase_cr)<-c("cil","veh")
+colnames(p_fullbase_cr)<-c("Nonrecovery","Recovery")
+p_fullbase_cr
+
+rownames(p_fulladmit_cr)<-c("cil","veh")
+colnames(p_fulladmit_cr)<-c("Nonrecovery","Recovery")
+p_fulladmit_cr
+
+
+
+```
+## recovery to "normal" GFR
+
+```{r recovery gfr, warning=FALSE, message=FALSE}
+# nonrecovery ------------------------------
+normal_gfr_pigs_lima<-read_csv(file=here(data,"normal_gfr_pigs_PMID29329247.csv")) 
+#Luis-Lima S, GarcC-a-Contreras C, VC!zquez-GC3mez M, Astiz S, Carrara F, Gaspari F, NegrC-n-Mena N, JimC)nez-Sosa A, JimC)nez-HernC!ndez H, GonzC!lez-Bulnes A, Porrini E. A Simple Method to Measure Renal Function in Swine by the Plasma Clearance of Iohexol. Int J Mol Sci. 2018 Jan 12;19(1):232. doi: 10.3390/ijms19010232. PMID: 29329247; PMCID: PMC5796180.
+npgfr<-normal_gfr_pigs_lima%>%mutate(gfr_wt=gfr2c_ml_min/wt_kg)%>%summarize(gfr=mean(gfr_wt))
+ylab<-"AKD"
+title<-"AKD.tiff"
+gfr<-M%>%select(animal, x,gfr,tx_group,x_units,gfr_units,weight_kg)%>%
+  mutate(gfr=gfr,y=gfr, units_x=x_units, units_y=gfr_units, tx=tx_group)
+gfr<-gfr%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))%>%
+    filter(animal!=80)%>%
+  ungroup()
+
+thresh_multiplier=1
+ngfr<-round(npgfr$gfr,1)
+
+gfr<-gfr%>%group_by(animal)%>%
+  mutate(normal_for_me_gfr=ngfr*weight_kg)%>%
+  mutate(recovery_gfr=ngfr*weight_kg*thresh_multiplier)%>%ungroup()
+  #mutate(recovery_gfr=gfr[x==6]*thresh_multiplier)%>%ungroup()
+
+
+
+cgfr<-gfr%>%
+  filter(x==48)%>%select(x,tx,animal,y,recovery_gfr)%>%
+
+  mutate(gfr.lt.thresh=ifelse(y<recovery_gfr,1,0))%>%
+  mutate(any_cila=animal%in%cila_tx)
+
+pa<-table(cgfr$any_cila,cgfr$gfr.lt.thresh)
+
+chisq.test(pa,simulate.p.value = T,B=50000)
+rownames(pa)<-c("veh","cil")
+colnames(pa)<-c("Recovery","Nonrecovery")
+pa 
+
+
+percent_veh_recovered<-pa[1,1]/(pa[1,1]+pa[1,2])*100
+percent_cil_recovered<-pa[2,1]/(pa[2,2]+pa[2,1])*100
+
+cat("Percent recovered to normal gfr was ", percent_cil_recovered," in cil, and ", percent_veh_recovered," in veh.") 
+
+```
+
+## Association of Nonrecovery with injury vs. treatment
+```{r nonrecovery_associations, warning=FALSE, message=FALSE}
+normal_gfr_pigs_lima<-read_csv(file=here(data,"normal_gfr_pigs_PMID29329247.csv")) #Luis-Lima S, GarcC-a-Contreras C, VC!zquez-GC3mez M, Astiz S, Carrara F, Gaspari F, NegrC-n-Mena N, JimC)nez-Sosa A, JimC)nez-HernC!ndez H, GonzC!lez-Bulnes A, Porrini E. A Simple Method to Measure Renal Function in Swine by the Plasma Clearance of Iohexol. Int J Mol Sci. 2018 Jan 12;19(1):232. doi: 10.3390/ijms19010232. PMID: 29329247; PMCID: PMC5796180.
+npgfr<-normal_gfr_pigs_lima%>%mutate(gfr_wt=gfr2c_ml_min/wt_kg)%>%summarize(gfr=mean(gfr_wt))
+gfr<-M%>%select(x,gfr,x_units,gfr_units,weight_kg,animal, map_rollm, iso_rollm, plCK, urPOR,plMB)%>%
+  mutate(gfr=gfr,y=gfr, units_x=x_units, units_y=gfr_units,weight=weight_kg)
+gfr<-gfr%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  #filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+#AUC for urPOR/plMB, plCK, MAP, iso_dose
+gfr_aucs<-gfr%>%group_by(animal)%>%mutate(PorExc=urPOR/plMB)%>%ungroup()
+gfr_aucs<-calc_auc(gfr_aucs, target="urPOR")
+gfr_aucs<-calc_auc(gfr_aucs, target="plCK")
+gfr_aucs<-calc_auc(gfr_aucs, target="PorExc")
+gfr_aucs<-calc_auc(gfr_aucs, target="iso_rollm")
+gfr_aucs<-calc_auc(gfr_aucs, target="map_rollm")
+gfr_aucs<-calc_auc(gfr_aucs, target="plMB")
+
+thresh=npgfr$gfr*mean(gfr$weight_kg)
+
+nr_gfr<-gfr_aucs%>%select(x,tx,animal,gfr, plCK,plMB, PorExc,urPOR, map_rollm, iso_rollm,weight_kg, contains("auc"))%>%
+  group_by(animal)%>%
+  filter(animal!=29&animal!=65&animal!=73)%>%
+  mutate(gfr.lt.thresh=ifelse(gfr[x==48]<thresh,1,0))%>%
+  mutate(PorExc2=PorExc[x==2])%>%ungroup()%>%
+  filter(x==48)
+
+#model <- glm(gfr.lt.thresh ~ tx+plCK_auc+plMB_auc+PorExc2+PorExc_auc+plCK_auc+map_rollm_auc+iso_rollm_auc,family=binomial,data=nr_gfr)
+model <- glmer(gfr.lt.thresh ~ tx*log(PorExc_auc,2)+(1|animal),family=binomial,data=nr_gfr)
+model <- glmer(gfr.lt.thresh ~ tx*log(plMB_auc,2)+(1|animal),family=binomial,data=nr_gfr)
+model <- glmer(gfr.lt.thresh ~ tx*log(urPOR_auc,2)+(1|animal),family=binomial,data=nr_gfr)
+drop1(model)
+summary(dm)
+summary(model)
+anova(model)
+```
+
+## Pathology scores
+
+```{r path,warning=FALSE,  message=FALSE}
+ylab<-"Acute Tubular Injury Score"
+title<-"path_cil_veh.tiff"
+
+library(ggrepel)
+
+path<-M%>%select(x,path_outer_ROI_score_mean,path_inner_ROI_score_mean,path_outer_ROI_comments,path_inner_ROI_comments,plCK,plMB,weight_kg,animal,tx_group, daylen)%>%
+  mutate(inner=path_inner_ROI_score_mean,outer=path_outer_ROI_score_mean,,weight=weight_kg)%>%
+  mutate(y=outer)%>%
+  rowwise()%>%
+  mutate(mean_of_inner_and_outer=mean(c(inner,outer),na.rm=TRUE))%>%
+  ungroup()
+path<-path%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(animal)%>%
+  mutate(CKbase=plCK[x==-1])%>%
+  mutate(CK2=plCK[x==2])%>%
+  mutate(dCK2=CK2-CKbase)%>%
+  mutate(CK6=plCK[x==6])%>%
+    mutate(mb2=plMB[x==2])%>%
+  mutate(mb6=plMB[x==6])%>%
+  mutate(maxCK=max(plCK,na.rm=TRUE))%>%
+  ungroup()%>%
+  filter(tx!=shamname)
+
+
+path<-droplevels(path)
+
+path<-path%>%group_by(animal)%>%reframe(tx=tx,CK2=CK2,mb2=mb2,mb6=mb6, CK6=CK6,maxCK=maxCK,outer=outer, inner=inner, y=inner, weight=weight, tx_group=tx_group, daylen=daylen, mean_of_inner_and_outer=mean_of_inner_and_outer)%>%distinct()
+
+ylab<-"Acute Tubular Injury Score"
+title<-"path_inner_outer_mean_cil_veh.tiff"                                                                                                                                                                                                                                                     
+p<-column_scatter_errorbar_plot(path,x=tx,y=mean_of_inner_and_outer, groupvar=tx,themevar=plot_theme_squareish2,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=FALSE,
+                                xlabel="Treatment",ylabel=ylab)
+
+p
+if(WRITE_PLOTS){ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+ylab<-"Inner Cortex Tubular Injury Score"
+title<-"path_inner_cil_veh.tiff"                                                                                                                                                                                                                                                     
+p<-column_scatter_errorbar_plot(path,x=tx,y=inner, groupvar=tx,themevar=plot_theme_squareish2,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=FALSE,
+                                xlabel="Treatment",ylabel=ylab)
+
+p
+if(WRITE_PLOTS){ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+ylab<-"Outer Cortex Tubular Injury Score"
+title<-"path_outer_cil_veh.tiff"                                                                                                                                                                                                                                                     
+p<-column_scatter_errorbar_plot(path,x=tx,y=outer, groupvar=tx,themevar=plot_theme_squareish2,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=FALSE,
+                                xlabel="Treatment",ylabel=ylab)
+
+p
+if(WRITE_PLOTS){ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+
+
+
+
+
+
+
+ggplot(path,aes(x=tx, y=inner, label=animal))+geom_point()+geom_text_repel()+plot_theme_squareish
+ggplot(path,aes(x=tx, y=outer, label=animal))+geom_point()+geom_text_repel()+plot_theme_squareish
+ggplot(path,aes(x=tx, y=mean_of_inner_and_outer, label=animal))+geom_point()+geom_text_repel()+plot_theme_squareish
+ggplot(path,aes(x=tx, y=inner/outer, label=animal))+geom_point()+geom_text_repel()+plot_theme_squareish
+
+ggplot(path,aes(x=CK2, y=inner, label=animal, color=tx))+
+  geom_point()+geom_text_repel()+geom_smooth(method="lm",se=FALSE)+
+  scalefillCV+
+  scalecolorCV+
+  plot_theme_squareish
+
+ggplot(path,aes(x=CK2, y=outer, label=animal, color=tx))+
+  geom_point()+geom_text_repel()+geom_smooth(method="lm",se=FALSE)+  
+  scalefillCV+
+  scalecolorCV+
+  plot_theme_squareish
+
+ggplot(path,aes(x=mb2, y=inner, label=animal, color=tx))+
+  geom_point()+geom_text_repel()+geom_smooth(method="lm",se=FALSE)+  
+  scalefillCV+
+  scalecolorCV+
+  plot_theme_squareish
+
+ggplot(path,aes(x=mb2, y=outer, label=animal, color=tx))+
+  geom_point()+geom_text_repel()+geom_smooth(method="lm",se=FALSE)+  
+  scalefillCV+
+  scalecolorCV+
+  plot_theme_squareish
+
+#analysis
+#statistical analysis - ttest
+a<-t.test(inner~tx, data=path)
+a
+b<-t.test(outer~tx, data=path)
+b
+```
+
+
+There is no significant difference with respect to treatment alone. To investigate further, we hypothesized that 2h values (within the time range of expected effectiveness of drug) of plasma myoglobin, but not CK, would affect renal pathology (as this would be consistent with the clearance mechanism observed in mice) Therefore we plotted inner cortex and outer corted pathology scores against these covariates.  The plots above suggest a strong relationship between inner cortical path score and 2h plasma CK is present in vehicle animals, and not present in cilastatin-treated animals. In the outer cortex, the relationship is similar in both treatment groups. With respect to plasma myoglobin, the inner cortical path score is positively correlated with in vehicle animals, but negatively correlated with plasma myoglobin in cilastatin-treated animals.  Again, in the outer cortex, there is not much relationship between path socre and plasma myoglobin, in either treatment group. This is partly in accordance with our hypothesis above, and requires further investigation.
+
+Therefore, to elucidate the potential treatment-dependent differential relationship between histopathology in the inner cortex and 2h plasma CK and myoglobin, we will use regression.
+
+```{r path2,warning=FALSE,  message=FALSE}
+
+path<-M%>%select(x,path_outer_ROI_score_mean,path_inner_ROI_score_mean,path_outer_ROI_comments,path_inner_ROI_comments,plCK,plMB,weight_kg,animal,tx_group, daylen)%>%
+  mutate(inner=path_inner_ROI_score_mean,outer=path_outer_ROI_score_mean,,weight=weight_kg)%>%
+  mutate(y=outer)%>%
+  rowwise()%>%
+  mutate(mean_of_inner_and_outer=mean(c(inner,outer),na.rm=TRUE))%>%
+  ungroup()
+path<-path%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(animal)%>%
+  mutate(CKbase=plCK[x==-1])%>%
+  mutate(CK2=plCK[x==2])%>%
+  mutate(dCK2=CK2-CKbase)%>%
+  mutate(CK6=plCK[x==6])%>%
+  mutate(dCK6=CK6-CKbase)%>%
+  mutate(mbbase=plMB[x==-1])%>%
+    mutate(mb2=plMB[x==2])%>%
+  mutate(dmb2=mb2-mbbase)%>%
+  mutate(mb6=plMB[x==6])%>%
+  mutate(maxCK=max(plCK,na.rm=TRUE))%>%
+  ungroup()%>%
+  filter(tx!=shamname)
+
+
+path<-droplevels(path)
+
+path<-path%>%group_by(animal)%>%reframe(tx=tx,,CKbase=CKbase,dCK2=dCK2,dCK6=dCK6,CK2=CK2,mb2=mb2,mb6=mb6, CK6=CK6,maxCK=maxCK,outer=outer, inner=inner, y=inner, weight=weight, tx_group=tx_group, daylen=daylen, mean_of_inner_and_outer=mean_of_inner_and_outer,dmb2=dmb2)%>%distinct()
+
+
+mod<-lm(inner ~ dCK2*tx + weight, data=path)
+summary(mod)
+
+#overall, the interaction between CK at 2h and treatment drives inner path score with p=0.0353
+
+mod<-lm(inner ~ dmb2*tx + weight, data=path)
+summary(mod)
+
+#overall, the interaction between mb at 2h and treatment does not drive inner path score with 
+
+
+```
+
+We also noticed that vacuolization seemed to be associated with treatment. To evaluate this further, we developed a tubular vacuolization score from the pathologist's comments, and plotted the result by treatment.  There is the suggestion (p~0.2) that treatment might affect inner cortical vacuolization. Since this is biologically plausible (cil could increase inner cortical exposure to myoglobin and vacuolization could be a proteotoxicity response), this merited addtional scrutiny.
+
+```{r path3_the_vacuoles,warning=FALSE,  message=FALSE}
+ylab<-"Vacuolization score"
+title<-"path_vacuoles_cil_veh.tiff"
+
+library(ggrepel)
+
+path<-M%>%select(x,path_outer_ROI_score_mean,path_inner_ROI_score_mean,path_outer_ROI_comments,path_inner_ROI_comments,plCK,plMB,weight_kg,animal,tx_group, daylen)%>%
+  mutate(inner=path_inner_ROI_score_mean,outer=path_outer_ROI_score_mean,,weight=weight_kg)%>%
+  mutate(y=outer)%>%
+  rowwise()%>%
+  mutate(mean_of_inner_and_outer=mean(c(inner,outer),na.rm=TRUE))%>%
+  ungroup()
+path<-path%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(animal)%>%
+  mutate(CKbase=plCK[x==-1])%>%
+  mutate(CK2=plCK[x==2])%>%
+  mutate(dCK2=CK2-CKbase)%>%
+  mutate(CK6=plCK[x==6])%>%
+    mutate(mb2=plMB[x==2])%>%
+  mutate(mb6=plMB[x==6])%>%
+  mutate(maxCK=max(plCK,na.rm=TRUE))%>%
+  mutate(inner_vacuole=ifelse(is.na(str_extract(path_inner_ROI_comments,"\\svacuolization")),0,1))%>%
+  mutate(outer_vacuole=ifelse(is.na(str_extract(path_outer_ROI_comments,"\\svacuolization")),0,1))%>%
+  mutate(inner_vacuole_score=case_when(
+    inner_vacuole&(str_detect(path_inner_ROI_comments,"mild")|str_detect(path_inner_ROI_comments,"minimal"))~1,
+    inner_vacuole&str_detect(path_inner_ROI_comments,"deep")~2,
+    inner_vacuole&str_detect(path_inner_ROI_comments,"patchy")~3,
+    inner_vacuole&str_detect(path_inner_ROI_comments,"diffuse")~4,
+    inner_vacuole&str_detect(path_inner_ROI_comments,"widespread")~5,
+    .default =0
+  ))%>%
+  mutate(outer_vacuole_score=case_when(
+    outer_vacuole&(str_detect(path_outer_ROI_comments,"mild")|str_detect(path_outer_ROI_comments,"minimal"))~1,
+    outer_vacuole&str_detect(path_outer_ROI_comments,"deep")~2,
+    outer_vacuole&str_detect(path_outer_ROI_comments,"patchy")~3,
+    outer_vacuole&str_detect(path_outer_ROI_comments,"diffuse")~4,
+    outer_vacuole&str_detect(path_outer_ROI_comments,"widespread")~5,
+    .default =0
+  ))%>%
+  ungroup()%>%
+  filter(tx!=shamname)
+
+
+path<-droplevels(path)
+t<-path%>%select(animal,path_inner_ROI_comments,inner_vacuole_score, path_outer_ROI_comments, outer_vacuole_score)%>%distinct()
+
+path<-path%>%group_by(animal)%>%reframe(tx=tx,dCK2=dCK2,CK2=CK2,mb2=mb2,mb6=mb6, CK6=CK6,maxCK=maxCK,outer=outer, inner=inner, y=inner, weight=weight, tx_group=tx_group, daylen=daylen, mean_of_inner_and_outer=mean_of_inner_and_outer,inner_vacuole_score=inner_vacuole_score,outer_vacuole_score=outer_vacuole_score)%>%distinct()
+
+ylab<-"Inner Cortex Vacuolization score"
+p<-column_scatter_errorbar_plot(path,x=tx,y=inner_vacuole_score, groupvar=tx,themevar=plot_theme_squareish2,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,                                
+                                p_brackets=FALSE,p_bracketsdata=brackets_table,
+                                xlabel="Treatment",ylabel=ylab)
+
+
+p
+
+wilcox.test(inner_vacuole_score~tx,data=path)
+
+ylab<-"Outer Cortex Vacuolization score"
+q<-column_scatter_errorbar_plot(path,x=tx,y=outer_vacuole_score, groupvar=tx,themevar=plot_theme_squareish2,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,                                
+                                p_brackets=FALSE,p_bracketsdata=brackets_table,
+                                xlabel="Treatment",ylabel=ylab)
+
+
+wilcox.test(outer_vacuole_score~tx,data=path)
+
+q
+
+
+thisplot_left_legend<-c(0.3,0.95)
+p<-p+theme(legend.position = thisplot_left_legend)
+p<-p+ylim(0,160)
+
+p<-p+geom_signif(xmin=1.75,
+                                    xmax=2.25,
+                                   y_position=3.5,
+                                   annotation="p=0.24",
+                                   tip_length = 0.025,
+                                    color="black",
+                                    vjust=-1)
+
+p
+
+
+
+z<-column_scatter_errorbar_plot(path,x=tx_group,y=inner_vacuole_score, groupvar=tx_group,themevar=plot_theme_squareish2,
+                                scalecolor=scalefillCCV,
+                                scalefill=scalefillCCV,                                
+                                p_brackets=FALSE,p_bracketsdata=brackets_table,
+                                xlabel="Treatment",ylabel=ylab)
+
+
+z
+
+
+
+ggplot(path,aes(x=dCK2, y=inner_vacuole_score, label=animal, color=tx))+
+  geom_point()+geom_text_repel()+geom_smooth(method="lm",se=FALSE)+
+  scalefillCV+
+  scalecolorCV+
+  plot_theme_squareish
+
+mod<-lm(inner_vacuole_score ~ dCK2*tx, data=path)
+summary(mod)
+
+
+ggplot(path,aes(x=dCK2, y=outer_vacuole_score, label=animal, color=tx))+
+  geom_point()+geom_text_repel()+geom_smooth(method="lm",se=FALSE)+  
+  scalefillCV+
+  scalecolorCV+
+  plot_theme_squareish
+
+mod<-lm(outer_vacuole_score ~ dCK2*tx + weight, data=path)
+summary(mod)
+
+
+ggplot(path,aes(x=mb2, y=inner_vacuole_score, label=animal, color=tx))+
+  geom_point()+geom_text_repel()+geom_smooth(method="lm",se=FALSE)+  
+  scalefillCV+
+  scalecolorCV+
+  plot_theme_squareish
+
+ggplot(path,aes(x=mb2, y=outer_vacuole_score, label=animal, color=tx))+
+  geom_point()+geom_text_repel()+geom_smooth(method="lm",se=FALSE)+  
+  scalefillCV+
+  scalecolorCV+
+  plot_theme_squareish
+
+cor.test(path$CK2,path$inner_vacuole_score)
+
+```
+
+Since Saito's recent paper (https://pubmed.ncbi.nlm.nih.gov/38721910/) suggests over-blockade of megalin could increase inner cortical casts and injury, we tested whether cilastatin altered the number of casts in the inner cortex.
+
+```{r path4_the_casts,warning=FALSE,  message=FALSE}
+ylab<-"Inner Cortex Cast Score"
+title<-"path_casts_cil_veh.tiff"
+
+library(ggrepel)
+
+path<-M%>%select(x,plCK,plMB,weight_kg,animal,tx_group, daylen,path_inner_casts_max)%>%
+  mutate(y=path_inner_casts_max)%>%
+  rowwise()%>%
+  ungroup()
+path<-path%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(animal)%>%
+  mutate(CKbase=plCK[x==-1])%>%
+  mutate(CK2=plCK[x==2])%>%
+  mutate(dCK2=CK2-CKbase)%>%
+  mutate(CK6=plCK[x==6])%>%
+    mutate(mb2=plMB[x==2])%>%
+  mutate(mb6=plMB[x==6])%>%
+  mutate(maxCK=max(plCK,na.rm=TRUE))%>%
+  ungroup()%>%
+  filter(tx!=shamname)
+
+
+path<-droplevels(path)
+
+path2<-path%>%group_by(animal)%>%reframe(tx=tx,CK2=CK2,mb2=mb2,mb6=mb6, CK6=CK6,maxCK=maxCK, weight=weight_kg, tx_group=tx_group, daylen=daylen, path_inner_casts_max=path_inner_casts_max,
+                                        y=path_inner_casts_max/dCK2)%>%distinct()
+                                                                                                                                        
+p<-column_scatter_errorbar_plot(path2,x=tx,y=y, groupvar=tx,themevar=plot_theme_squareish2,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=FALSE,
+                                xlabel="Treatment",ylabel=ylab)
+
+p
+
+if(WRITE_PLOTS){ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+```
+
+
+## path with AKI scoring
+
+```{r path aki TDS score}
+akiscore<-read.xlsx(here("Data","path_nka_3.7.25.xlsx"),sheet=3, startRow=1)
+akiscore<-akiscore%>%select(-c(`semiblind`,starts_with("w")))
+hpf<-rep(seq(1:16),each=3)
+names<-rep(c("flat","vac","nec"),16)
+c<-paste0(names,"_",hpf)
+cols<-c("animal","tx",c)
+colnames(akiscore)<-cols
+write_csv(akiscore,"akiscore_03182025.csv")
+score_long<-akiscore%>%pivot_longer(cols=3:50, names_to=c("feature","hpf"),names_sep="_")
+
+#calculate akiscore 
+# Luping Zhou et al. ,Glucocorticoids induce a maladaptive epithelial stress response to aggravate acute kidney #injury.Sci. Transl. Med.16,eadk5005(2024).DOI:10.1126/scitranslmed.adk5005
+# The tubular damage score was determined on periodic acid–Schiff (PAS)–stained kidney sections by an observer blinded #to genotype and treatment. Four damage parameters were evaluated: brush border loss, flattened tubular epithelium, #epithelial vacuolization, and epithelial necrosis. Each of these parameters was graded as 0 (normal), 1 (slight), 2 #(moderate), or 3 (severe). For each of the four damage parameters, a mean score per high-power field (HPF) was #calculated. Eight HPFs were evaluated in the renal cortex, and eight HPFs in the outer medulla were evaluated in the #apex part of a coronal section. Then, for each damage parameter, a mean of all evaluated HPFs was determined. Last, #the “tubular damage score” was calculated as the sum of the mean of the four damage parameters; the parameter #“epithelial necrosis” was given double weighting (that means multiplied by two). Analyses of serum and urine #parameters were performed with a Cobas c 311 analyzer (Roche Diagnostics).
+
+# tubular damage score=mean(brush border loss)+mean(flattened epithelium)+mean(vacuolization)+2*mean(epithelial necrosis)
+
+score_long<-score_long%>%group_by(animal)%>%
+  mutate(mean_flat=mean(value[feature=="flat"]))%>%
+  mutate(mean_vac=mean(value[feature=="vac"]))%>%
+  mutate(mean_nec=mean(value[feature=="nec"]))
+
+score<-score_long%>%select(animal,tx,starts_with("mean"))%>%distinct()%>%
+  mutate(tds=mean_flat+mean_nec+2*mean_nec)
+
+ggplot(score, aes(x=factor(tx),y=tds, label=animal))+
+  geom_point()+
+  geom_text()
+  theme_classic()
+
+#join the tds to the master
+
+M<-M%>%left_join(select(score,animal,tds), by="animal")
+
+#build an analysis dataframe
+tdscore<-M%>%select(x,plCK,plMB,weight_kg,animal,tx_group, daylen,tds)%>%
+  mutate(y=tds)%>%
+  ungroup()
+tdscore<-tdscore%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(animal)%>%
+  mutate(CKbase=plCK[x==-1])%>%
+  mutate(CK2=plCK[x==2])%>%
+  mutate(dCK2=CK2-CKbase)%>%
+  mutate(CK6=plCK[x==6])%>%
+  mutate(dCK6=CK6-CKbase)%>%
+  mutate(mbbase=plMB[x==-1])%>%
+    mutate(mb2=plMB[x==2])%>%
+  mutate(dmb2=mb2-mbbase)%>%
+  mutate(mb6=plMB[x==6])%>%
+  mutate(maxCK=max(plCK,na.rm=TRUE))%>%
+  ungroup()
+
+tdscore_all<-tdscore
+
+tdscore<-tdscore%>%
+  filter(tx!=shamname)
+
+tdscore<-tdscore%>%select(-x, -plCK, -plMB)%>%distinct()
+tdscore<-tdscore%>%mutate(tx=fct_relevel(tx,"veh", "cil"))
+tdscore<-tdscore%>%mutate(tx=relevel(tx,ref="veh"))
+tdscore<-droplevels(tdscore)
+
+#analysis
+#statistical analysis -- ttest  # we actually show the multiplicity-adjusted p value from ANOVA (computed below) in the figure.
+t.test(tds~tx,data=tdscore)
+
+#percent reduction
+tdscore<-tdscore%>%mutate(tds_mean_veh=mean(tds[tx=="veh"]))
+tdscore<-tdscore%>%rowwise()%>%mutate(tds_pct_veh=(tds-tds_mean_veh)/tds_mean_veh*100)
+
+tdscore%>%group_by(tx)%>%summarize(mreduction=mean(tds_pct_veh), sd=sd(tds_pct_veh))
+
+#plot
+
+ylab<-"Tubular Damage Score"
+title<-"tds_path_cil_veh.tiff"                                                                                                                                                                                                                                                     
+p<-column_scatter_errorbar_plot(tdscore,x=tx,y=tds, groupvar=tx,themevar=plot_theme_squareish2,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=FALSE,
+                                xlabel="Treatment",ylabel=ylab)
+
+p<-p+geom_signif(xmin=1,
+                 xmax=2,
+                 y_position=3.5,
+                 annotation="p=0.029",
+                 tip_length = 0.025,
+                 color="black",
+                 vjust=0)
+
+
+p
+if(WRITE_PLOTS){ggsave(filename=here(figure_parts,title),plot=p, width=3, height=2.25,dpi=300,units="in")}
+
+
+#plot and analyze 3 groups together (ANOVA)
+tdscore_all<-tdscore_all%>%mutate(tx=fct_relevel(tx,"no impact", "veh", "cil"))
+tdscore_all<-tdscore_all%>%mutate(tx=relevel(tx,ref="no impact"))
+tdscore_all<-tdscore_all%>%select(-x, -plCK, -plMB)%>%distinct()
+tdscore_all<-droplevels(tdscore_all)
+mod<-aov(tds~tx,data=tdscore_all)
+summary(mod)
+TukeyHSD(mod)
+custom <- list("veh vs. no impact"= c(1,-1,0),
+              "veh vs. cil" = c(0,1,-1),
+               "cil vs. no impact" = c(-1,0,1))
+
+e<-emmeans(mod,~tx, data=tdscore_all, adjust = "sidak")
+contrast(e,custom)
+e
+
+
+ylab<-"Tubular Damage Score"
+title<-"tds_path_sham_cil_veh.tiff"                                                                                                                                                                                                                                                     
+p<-column_scatter_errorbar_plot(tdscore_all,x=tx,y=tds, groupvar=tx,themevar=plot_theme_squareish2,
+                                scalecolor=scalecolorSCV,
+                                scalefill=scalefillSCV,
+                                p_brackets=FALSE,
+                                xlabel="Treatment",ylabel=ylab)
+
+p<-p+geom_signif(xmin=1,
+                 xmax=1.85,
+                 y_position=3.5,
+                 annotation="p<0.0001",
+                 tip_length = 0.025,
+                 color="black",
+                 vjust=0)
+
+p<-p+geom_signif(xmin=2.15,
+                 xmax=3,
+                 y_position=3.5,
+                 annotation="p=0.001",
+                 tip_length = 0.025,
+                 color="black",
+                 vjust=0)
+
+p<-p+guides(fill=guide_legend(nrow=1))
+
+p
+if(WRITE_PLOTS){ggsave(filename=here(figure_parts,title),plot=p, width=3, height=3,dpi=300,units="in")}
+
+
+```
+
+## recovery of GFR - lowest GFR to 48h
+
+```{r gfr recovery}
+
+ylab<-"GFR (mL/min)"
+title<-"GFR_recovery_cil_veh.tiff"
+gfr<-M%>%select(x,gfr,x_units,gfr_units,weight_kg,animal, daylen)%>%
+  mutate(gfr=gfr,y=gfr, units_x=x_units, units_y=gfr_units,weight=weight_kg)
+gfr<-gfr%>%
+  filter(x%in%gfr_timepoints)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))
+gfr<-gfr%>%ungroup()%>%
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))%>%
+  filter(!animal%in%c(29,65,73,80)) #animal 73 and 29has no 48h gfr
+
+gfrsum<-gfr%>%ungroup()%>%
+  group_by(animal)%>%
+  mutate(min=min(y,na.rm=TRUE))
+
+gfrsum<-gfrsum%>%group_by(animal)%>%
+      mutate(min=min(y,na.rm=TRUE))%>%
+      mutate(h48=y[x==48])%>%
+      mutate(h24=y[x==24])%>%
+      mutate(h6=y[x==6])%>%
+      mutate(gfr_recovery=h48-min)%>%
+      mutate(gfr_pct_recovery=h48/min)%>%
+     mutate(gfr_recovery_pct_min=gfr_recovery/min)%>%
+    ungroup()
+
+dat<-gfrsum%>%select(gfr_recovery_pct_min,gfr_pct_recovery,gfr_recovery,min,h48,tx, animal,,h24,h6)%>%group_by(animal)%>%distinct
+
+ddat<-dat%>%group_by(animal)%>%pivot_longer(4:5,names_to="timepoint")%>%
+  mutate(timepoint=factor(timepoint, levels=c("min","h48")))
+
+ddat2448<-dat%>%group_by(animal)%>%pivot_longer(c(5,8),names_to="timepoint")%>%
+  mutate(timepoint=factor(timepoint, levels=c("h24","h48")))
+
+model<-lmer(value~tx*timepoint+(1|animal), data=ddat2448)
+summary(model)
+emm_model <- emmeans(model,~tx*as.factor(timepoint),level=0.95)
+summary(emm_model)
+emm_means<-print(emm_model)
+pairs_model_tx<-pairs(emm_model,by = "tx", adjust="sidak", reverse=TRUE)
+summary(pairs_model_tx)
+pairs_model_time<-pairs(emm_model,by = "timepoint", adjust="sidak")
+summary(pairs_model_time)
+confint_model<-confint(pairs_model_time,by = "timepoint")
+confint_model
+
+p_cv_time_h24<-as.character(format_pval(summary(pairs_model_time)$p.value[1]))
+p_cv_time_h48<-as.character(format_pval(summary(pairs_model_time)$p.value[2]))
+p_c_tx<-as.character(format_pval(summary(pairs_model_tx)$p.value[1]))
+p_v_tx<-as.character(format_pval(summary(pairs_model_tx)$p.value[2]))
+p_interaction_overall_model<-as.character(format_pval(summary(model)$coefficients[4,"Pr(>|t|)"])) 
+
+q<-ggplot(ddat2448, aes(x=timepoint,y=value,color=tx))+
+  scale_color_manual(values=redblue)+
+  geom_point()+
+  geom_line(aes(group=animal,color=tx))+
+  plot_theme_squareish2+
+  xlab("Time point")+
+  ylab(ylab)+
+  ylim(0,125)+
+
+    annotate("segment",x = 0.75, y = 25, xend = 0.75, yend = 105, color="black")+
+  annotate("text", ,x = 0.65, y = 65,angle=90,label=paste("cil-veh ", p_cv_time_h24))+
+  annotate("segment",x = 0.75, y = 105, xend = 0.8, yend = 105, color="black")+
+    annotate("segment",x = 0.75, y = 25, xend = 0.8, yend = 25, color="black")+
+    
+    annotate("segment",x = 2.25, y = 25, xend = 2.25, yend = 105, color="black")+
+  annotate("text", ,x = 2.35, y = 65,angle=270,label=paste("cil-veh ",p_cv_time_h48))+
+  annotate("segment",x = 2.25, y = 105, xend = 2.20, yend = 105, color="black")+
+    annotate("segment",x = 2.25, y = 25, xend = 2.20, yend = 25, color="black")+
+  annotate("text",x = 1.5, y = 12,angle=0,label=paste("interaction ", p_interaction_overall_model))
+
+q
+
+
+
+if(WRITE_PLOTS){ggsave(filename=here(figure_parts,title),plot=3, width=3.0, height=3,dpi=300,units="in")}
+
+summarystat_paper(dat$min[dat$tx=="cil"],dat$min[dat$tx=="veh"],1)
+summarystat_paper(dat$gfr_recovery[dat$tx=="cil"],dat$gfr_recovery[dat$tx=="veh"],1)
+
+```
+
+
+## K interventions
+
+```{r kint ,warning=FALSE,  message=FALSE}
+# K interventions: Kaplan-Meier AKI and rhabdomyolysis --------------------------
+
+library (survival)
+library(survminer)
+source(here(code,"plot_common.R"))
+
+title<-"KIV_KM_cil_veh2.tif"
+
+
+kivints<-get_kiv()
+kivints_summary<-kivints%>%group_by(animal)%>%
+  summarise(n=sum(!is.na(x)),n6=sum(x<=6),n24=sum(x<=24),n12=sum(x<=12),t.first.int=min(x),t.last.int=max(x))%>% distinct()
+
+kivints_summary <- kivints_summary %>% mutate(n6 = ifelse(is.na(n6), 0, n6),
+                                              n12 = ifelse(is.na(n12), 0, n12),
+                                              n24 = ifelse(is.na(n24), 0, n24),
+                                              t.first.int = ifelse((n==0), 49, t.first.int),
+                                              t.last.int = ifelse((n==0), 49, t.last.int))
+
+kivints_summary_ff<-kivints_summary%>%
+  filter(!(animal%in%excluded))%>%
+  filter(animal%in%ff_sx)%>%
+  filter((animal%in%cila_tx)|(animal%in%veh_tx))
+
+kivints_summary_ff<-kivints_summary_ff %>% 
+  mutate(treatment=as.factor(ifelse(animal %in% sham_sx, shamname,ifelse(animal%in%cila_tx,"cil","veh"))))
+kivints_summary_ff<-kivints_summary_ff %>% 
+  filter(treatment!=shamname)
+
+kivints_summary_ff<-kivints_summary_ff%>%mutate(treatment=fct_relevel(treatment,"veh", "cil"))
+kivints_summary_ff<-kivints_summary_ff%>%mutate(treatment=relevel(treatment,ref="veh"))
+kivints_summary_ff<-droplevels(kivints_summary_ff)
+
+k.surv.time<-kivints_summary_ff
+
+#k.surv.time<-k.surv.time%>%filter((!(animal%in%excluded))&(!(animal%in%kiv_by_0))&(animal%in%ff_sx))
+k.surv.time<-k.surv.time%>%filter(!(t.first.int<0))
+k.surv.time<-transform(k.surv.time, t.first.int=as.integer(t.first.int))
+
+k.surv.time<-k.surv.time%>%mutate(outcome= ifelse(is.na(t.first.int),0,1))
+
+
+
+k.surv.fit<-survfit(Surv(t.first.int, outcome, type='right')~treatment,data=k.surv.time)
+
+
+p<-ggsurvplot(k.surv.fit, data=k.surv.time,,censor=TRUE, pval = TRUE, pval.method=TRUE,
+           title ="",xlab="Time to K Intervention", ylab="Proportion Without K>5.0",
+           palette =veh_cil,
+           risk.table = TRUE,
+           tables.height = 0.2,
+           tables.theme = theme_cleantable())
+
+p
+
+
+
+if(WRITE_PLOTS){ 
+  tiff(title)
+  tiff(here(figure_parts,title), width=5, height=6,res=300,compression="none", units="in",type = "windows",pointsize=8, antialias="cleartype")
+  print(p)
+  dev.off()
+}
+
+
+```
+
+
+## Cumulative K interventions
+```{r cumulative k interventions}
+# K interventions: AKI and rhabdomyolysis --------------------------
+ylab<-"Hyperkalemia Treatment (n)"
+title<-"KIV_n_cumulative_cil_veh.tiff"
+kivnc<-M%>%select(x,kiv_N_cum,x_units,weight_kg,animal)%>%
+  mutate(kivnc=kiv_N_cum,y=kiv_N_cum, units_x=x_units, weight=weight_kg)
+kivnc<-kivnc%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=0)&(x<=48))
+
+
+kivnc<-kivnc%>%mutate(tx=fct_relevel(tx,"veh", "cil"))
+kivnc<-kivnc%>%mutate(tx=relevel(tx,ref="veh"))
+kivnc<-droplevels(kivnc)
+
+
+#plot
+
+xlab<-"Time (h)"
+p<-ggplot(kivnc,aes(x=factor(x),y=y, fill=tx,color=tx))+
+  scale_color_manual(values=gamut_shamveh, aesthetics=c("color", "fill"))+
+  geom_boxplot()+#,aes(x=factor(x),fill=tx)
+  #scale_x_discrete(breaks=timepoints) +
+  labs(x=xlab, y=ylab,tx="Treatment") +
+  plot_theme_wide+
+  theme(legend.position = left_legend)
+#ylim(0,100)
+
+#analysis
+#statistical analysis - lmer followed by bh-adjusted pairwise
+model<-lmer(y~tx*as.factor(x)+(1|animal),data=kivnc)
+summary(model)       
+emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
+emm_means<-print(emm_model)
+pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
+confint_model<-confint(pairs_model,by = "x")
+spairs<-summary(df<-summary(pairs_model))
+spairs
+pair_summary<-summary(pairs_model)
+pair_summary<-pair_summary%>%mutate(star=pstar_horiz(p.value))
+maxy<-setmaxY(max(kivnc$y))
+brackets_table<-pairs_to_significance_table(pair_summary,maxy)
+
+
+p<-column_scatter_errorbar_plot(kivnc,x=factor(x),y=y, groupvar=tx,themevar=plot_theme_wide,
+                                scalecolor=scalecolorCV,
+                                scalefill=scalefillCV,
+                                p_brackets=TRUE,p_bracketsdata=brackets_table,bracket_nudge=-10,
+                                xlabel="Time (h)",ylabel=ylab)
+
+thisplot_left_legend<-c(0.35,0.95)
+p<-p+theme(legend.position = thisplot_left_legend)
+p<-p+theme(plot.margin = unit(c(1,1,1,1), "mm"))
+p
+
+#write the plot
+
+if(WRITE_PLOTS){ ggsave(filename=here(figure_parts,title),plot=p, width=3.0, height=2.25,dpi=300,units="in")}
+
+
+emm_sig_summary_paper(kivnc,pair_summary,emm_means, showall=TRUE)
+```
+
+## Survival (all groups)
+
+```{r overall survival ,warning=FALSE,  message=FALSE}
+
+library (survival)
+library(survminer)
+
+
+title<-"survival_all_groups.tif"
+
+surv<-M%>%select(animal,last_hr)%>%distinct()
+
+surv<-surv%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ "no impact",
+    animal%in%veh_tx ~ "veh",
+  )
+  ))
+
+
+surv_summary <- surv %>% mutate(outcome=ifelse(last_hr>=48,FALSE,TRUE))
+
+surv.fit<-survfit(Surv(last_hr, outcome, type='right')~tx,data=surv_summary)
+#needed to ggsave ggsurvplot
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+
+p<-ggsurvplot(surv.fit, data=surv_summary,censor=TRUE,  risk.table=FALSE,
+           title ="",xlab="Time to death", ylab="Surviving proportion",
+           pval=TRUE,
+           pval.method =TRUE,
+           palette =sham_cil_veh,
+           tables.height = 0.2,
+           tables.theme = theme_cleantable())
+
+p
+
+
+tiff(here(figure_parts,title))
+print(p)
+dev.off()
+
+if(WRITE_PLOTS){ggsave(filename=here(figure_parts,title),plot=print(p), width=3.0, height=3,dpi=300,units="in")}
+
+
+```

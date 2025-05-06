@@ -1,0 +1,112 @@
+---
+title: "Fig_1_Consort_Diagram"
+author: "Hutchens"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Set up the needed data
+```{r get data}
+if( !require(tidyverse) ){install.packages("tidyverse"); require(tidyverse)}
+if( !require(readxl)    ){install.packages("readxl"); require(readxl)}
+if( !require(openxlsx)  ){install.packages("openxlsx"); require(openxlsx)}
+if( !require(consort)   ){install.packages("consort"); require(consort)}
+if( !require(grDevices)   ){install.packages("grDevices"); require(grDevices)}
+if( !require(devEMF)   ){install.packages("devEMF"); require(devEMF)}
+if( !require(here)   ){install.packages("here"); require(here)}
+filter<-dplyr::filter
+lag<-dplyr::lag
+
+
+code<-here("R_script")
+
+source(here(code,"paper_common.R"))
+
+Mne<-get_master(file.path(DATAHUB, "DOD2_ALL.unfiltered.xlsx"))
+met<-Mne%>%select(animal, weight_kg, model, sx_on_prot, sx_ok, preinjury_ok, postinjury_ok, cilastatin, calcitriol, last_hr)%>%distinct()
+met<-factor_by_tx(met)
+```
+
+
+``` {r make the consort diagram}
+
+mx<-met%>%filter((model!="pchs")&(model!="ff5x"))
+# we changed the name of the sham group, since it's not really a sham.  Fix that in the table used here
+mx<-mx%>%rowwise()%>%mutate(tx_group=fct_recode(tx_group,"no impact" ='sham'))%>%ungroup()
+# screen model
+mx<-mutate(mx, Excl1a=ifelse(model %in% c("sham", "ff"), NA,
+                            ifelse(is.na(model), "Surgeon Training", "Unknown")),
+           .after=model)
+
+mx<-mutate(mx, Excl1b=ifelse(is.na(Excl1a) & !sx_on_prot, "Model Development", NA),
+           .after=sx_on_prot)
+
+# merge model and off-protocol
+mx<-mutate(mx, Excl1=ifelse(!is.na(Excl1a), Excl1a,
+                            ifelse(!is.na(Excl1b), Excl1b, NA)),
+           .after=Excl1b)
+
+# animals randomized
+mx<-mutate(mx, Allocated=ifelse(is.na(Excl1), animal, NA), .after=Excl1)
+
+# treatment arms
+mx<-mutate(mx, Arm=ifelse(!is.na(Allocated), as.character(tx_group), NA), .after=Allocated)
+
+# screen sx protocol deviations
+mx<-mutate(mx, Excl2=ifelse(!is.na(Allocated) & sx_on_prot &
+                              !sx_ok, "Deviation", NA),
+           .after=sx_ok)
+
+# screen pre existing illness
+mx<-mutate(mx, Priors=ifelse(!is.na(Allocated) & sx_on_prot & sx_ok &
+                               !preinjury_ok, "Baseline", NA),
+           .after=preinjury_ok)
+
+# screen injured animals for poor response
+mx<-mutate(mx, LoRhabdo=ifelse(!is.na(Allocated) & sx_on_prot& sx_ok & preinjury_ok &
+                                 (model == "ff" & !postinjury_ok), "Missed impact", NA),
+           .after=postinjury_ok)
+
+# merge pre and post injury screens
+mx<-mutate(mx, Excl3=ifelse(!is.na(Priors), Priors, ifelse(!is.na(LoRhabdo), LoRhabdo,  NA )), .after=LoRhabdo)
+
+
+# merge all model nonadherence into one exclusion (excl 4)
+mx2<-mx
+mx2<-mx%>%mutate(Excl4=ifelse(!is.na(Excl2), Excl2, ifelse(!is.na(Excl3),Excl3,NA)))
+mx2<-mx2%>%mutate(Excl2=Excl4)
+
+p<-consort_plot(data=mx,
+             order= c(animal= "Population",
+                      Excl1=  "Other Uses",
+                      Arm= "Randomized",
+                      Excl2=  "Model nonadherence",
+                      animal= "Full Data Collection",
+                      Excl3=  "Invalid model",
+                      animal= "Final Analysis"),
+             side_box= c("Excl1", "Excl2", "Excl3"),
+             allocation= "Arm"
+             )
+
+q<-consort_plot(data=mx2,
+             order= c(animal= "Population",
+                      Excl1=  "Other Uses",
+                      Arm= "Randomized",
+                      Excl2=  "Protocol Excl.",
+                      animal= "Final Analysis"),
+             side_box= c("Excl1", "Excl2"),
+             allocation= "Arm"
+             )
+q
+
+title="f1_consort_diagram.emf"
+pltq<-build_grid(q)
+#ggsave(filename=title,plot=pltq,units="in",width=7, height=4, dev=emf)
+fpfilename<-here("figure_parts",title)
+#ggsave(filename=fpfilename,plot=pltq, units="in", dev=emf)
+
+```

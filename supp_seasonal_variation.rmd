@@ -1,0 +1,185 @@
+---
+title: "Seasonal variation and model determination"
+author: "Michael Hutchens"
+date: "`r Sys.Date()`"
+output:
+  
+  word_document: 
+    reference_docx: word-styles-reference-01.docx
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("paper_common.R")
+if( !require(hydroTSM)  ){install.packages("hydroTSM"); require(hydroTSM)} #additional include required for season determination
+if( !require(multilevelTools)  ){install.packages("multilevelTools"); require(multilevelTools)} #for comparison of Lmer models
+
+#add daylength
+M<-M%>%group_by(animal)
+M<-M%>%mutate(j_sx_date=as.double(julian(as_datetime(sx_date))))
+M<-M%>%rowwise()%>%mutate(daylen=round(unlist(daylength(latitude=45,JDay=j_sx_date))[3],2))
+M<-M%>%ungroup()%>%mutate(experiment_day=j_sx_date-j_sx_date[1L])
+M<-M%>%mutate(j_sx_date=as.double(julian(as_datetime(sx_date))))
+M<-M%>%rowwise()%>%mutate(daylen=round(unlist(daylength(latitude=45,JDay=j_sx_date))[3],2))
+M<-M%>%ungroup()%>%mutate(experiment_day=j_sx_date-j_sx_date[1L])
+M<-M%>%mutate(season=time2season(as.POSIXct(sx_date)))
+M<-M%>%ungroup()
+
+base<-M%>%filter(x==-1)
+
+```
+
+## Daylength/Seasonal variation in baseline laboratory and physiologic values
+
+We noted apparent seasonal variations in baseline (prior to injury) values.
+
+The table below lists Pearson correlation coefficients for variables with significant correlation.
+
+```{r correlations, echo=FALSE,message=FALSE, results="hide", warning=FALSE}
+#remove controlled variables 
+numbase<-base%>% dplyr::select(where(is.numeric))%>%dplyr::select(-starts_with("urom"))%>%
+  dplyr::select(-contains("rollm"))%>%dplyr::select(-contains("calci"))%>%
+  dplyr::select(-contains("fluids"))%>%dplyr::select(-contains("set"))%>%dplyr::select(-contains("uality"))
+corrs<-cor(numbase,numbase$daylen)
+ts<-corrs*(sqrt(36-2)/sqrt(1-corrs^2))
+p<-dt(corrs,35,2)
+rn=row.names(corrs)
+c<-data.frame(Pearson=round(corrs,3),p.val=round(p,3))
+c.sig<-c%>%filter(p<0.05)%>%arrange(p.val*Pearson)
+```
+
+
+```{r correlation_table, echo=FALSE, message=FALSE, results="hide", warning=FALSE}
+knitr::kable(c.sig[1:10,], caption="Top 10 baseline variables with significant correlation to day length")
+```
+
+The correlation between the injury marker, creatine kinase (CK), and day length was the strongest and most significant, and is depicted in the scatter plot (with regression line and 95% confidence interval) below.
+
+```{r corr_plot, echo=FALSE,message=FALSE, results="hide", warning=FALSE}
+ggplot(numbase,aes(x=daylen,y=plCK))+
+  geom_point()+
+  geom_smooth(method="lm", color="black", linewidth=0.25)+
+  theme_classic()+
+  xlab("Daylength")+
+  ylab("Baseline CK")+
+  annotate("text", x = 12, y = 1200, label = "Pearson r= -0.37, p=0.02")
+```
+
+Therefore we examined the relationship between baseline CK and daylength further.  We fit a sine function (y ~ a * sin(2 * pi * f * x + phi) + d) to the daylength and then the same function to the CK.  The sine function fit both data well with an approximately 90 degree phase shift between day length and CK, confirming that during Winter, baseline CK was high, and during Summer, baseline CK was low. This is plotted below.
+
+```{r seasonal_variation_plot, echo=FALSE,message=FALSE, results="hide", warning=FALSE}
+#fit a sine wave to the daylength data and see how well it fits (it should fit VERY well)
+
+# fit a sine wave to the daylength data and see how well it fits  --------
+
+#set up the dataset
+t<-data.frame(x=seq(0,max(numbase$experiment_day)))
+pldt<-numbase%>%select(animal,experiment_day,daylen, plCK)
+t<-t%>%left_join(pldt,join_by(x==experiment_day),keep=TRUE)
+#t$pdaylen<-predict(fit, newdata=t)
+
+#scale CK values and daylength values
+t<-t%>%mutate(zplCK=as.numeric(scale(plCK)[,1]))
+t<-t%>%mutate(zdaylen=as.numeric(scale(daylen)[,1]))
+
+# Define the model formula to fit onto the dataset
+sine_model <- y ~ a * sin(2 * pi * f * x + phi) + d
+
+# Initial parameter values to help the model fit onto the funtion
+amplitude<-range(t$zdaylen, na.rm=TRUE)[2]-range(t$zdaylen, na.rm=TRUE)[1]
+#spec<-spec.ar(numbase$daylen)
+#frequency<-spec$freq[which.max(spec$spec)]#2*pi/4
+frequency=1/365
+phi=0
+vertical_shift<-0  
+initial_params <- list(a = amplitude, f = frequency, phi = phi, d = vertical_shift)
+
+# Fit the model to the sinusiodal funtion using the nls()function
+fit <- nls(sine_model, data = data.frame(x = t$experiment_day, y = t$zdaylen), start = initial_params)
+
+summary(fit)
+
+#plot the predicted and actual daylength
+t$pzdaylen<-predict(fit,newdata=select(t,x))
+
+
+# 
+# ggplot(t, aes(x=x))+
+#   geom_point(aes(y=zdaylen))+
+#   geom_line(aes(y=pzdaylen),color="blue")+
+#   theme_classic()+
+#   xlab("Days since start of experiment")+
+#   ylab("Scaled Day Length")
+
+
+
+#next, try to fit a sine wave to the baseline CK values
+t<-t%>%filter((zplCK<=2.5)|(is.na(zplCK)))
+amplitude=1.5*(range(numbase$plCK, na.rm=TRUE)[2]-range(numbase$plCK, na.rm=TRUE)[1])
+vertical_shift=0
+frequency=1/365
+phi=0.3
+initial_params <- list(a = amplitude, f = frequency, phi = phi, d = vertical_shift)
+ckfit <- nls(sine_model, data = data.frame(x = t$experiment_day, y = t$zplCK), start = initial_params, 
+             subset=0:590)
+
+summary(ckfit)
+sd(t$zplCK, na.rm=TRUE)
+t$pzplCK<-predict(ckfit,newdata=select(t,x))
+
+
+
+
+
+ggplot(t, aes(x=x))+
+  geom_point(aes(y=zdaylen),shape=17,color="blue",alpha=0.25)+
+  geom_point(aes(y=zplCK),shape=16,color="red",alpha=0.5)+
+  geom_line(aes(y=pzdaylen),color="blue")+
+  geom_line(aes(y=pzplCK),color="red")+
+  theme_classic()+
+  xlab("Days since start of experiment")+
+  ylab("Scaled Day Length and Baseline CK")+
+  annotate("text", x = 19, y = -0.7, label = "Daylength", color="blue")+
+  annotate("text", x = 29, y = 0.75, label = "Baseline CK", color="red")+
+  annotate("text", x = 375, y = -1.8, label = "p (frequency)=0.00000000006", color="red")+
+  annotate("text", x = 375, y = -1.9, label = "residual standard error=0.64", color="red")
+
+
+```
+
+## Model Selection
+
+Now we use this data to determine which linear mixed model best fits the CK data for all values (necessary for regression); this will be used to inform the model we use for outcome determination.  Baseline CK seems to vary by daylength.  Each animal is different.  Therefore animal ID# is expected to be a random variable in the model. Do models improve if we account for daylength and or season also? Here,is CK best fit with daylength, animal, or season (or a combination)?  Since daylength is nested within animal, it is reasonable to compare models with ANOVA.  As a last step, we perform this comparison
+
+
+```{r model determination, echo=TRUE,message=FALSE, results="show", warning=FALSE}
+
+model1<-lmer(scale(plCK)~x+(1|animal), data=M)
+summary(model1)
+
+model2<-lmer(scale(plCK)~x+(1|daylen), data=M)
+summary(model2)
+
+model3<-lmer(scale(plCK)~x+(1|season), data=M)
+summary(model3)
+
+model4<-lmer(scale(plCK)~x+(animal|daylen), data=M)
+summary(model4)
+
+model5<-lmer(scale(plCK)~x+(animal|season), data=M)
+summary(model5)
+
+```
+
+The residual variance is minimized when we account for daylength/seasonal variation within the animal identification variable. This makes sense because animals have random variability at baseline which includes and is a superset of seasonal variability alone.  Therefore, analyses of outcomes which use animal ID as a random effect makes sense. As a last test, we compare models which include just animal ID, or animal ID and daylength (models 1 and 4 above.)
+
+```{r model comparison, echo=TRUE,message=FALSE, results="show", warning=FALSE}
+test<-anova(model1, model4)
+summary(test)
+
+```
+
+## Conclusion
+
+Including both animal and daylength as random effects does not improve fitting -- the ANOVA comparison suggests the two models are very similar, with AIC and log liklihood both lower for the more parsimonious model including just animal ID.  
