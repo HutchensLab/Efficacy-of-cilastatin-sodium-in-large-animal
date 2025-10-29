@@ -74,7 +74,22 @@ gfr<-droplevels(gfr)
 
 #analysis
 #statistical analysis - lmer followed by bh-adjusted pairwise
-model<-lmer(y~tx*as.factor(x)+(1|animal),data=gfr)
+model<-lme4::lmer(y~tx*as.factor(x)+(1|animal),data=gfr)
+
+#reviewer 3 suggested we check for assumption violation/nonnormality
+#robustness of lmer to violations of assumption (residual distribution primarily)
+#is somewhat controversial.  See doi 10.1111/2041-210X.13434 and 10.18637/jss.v075.i06
+#we do this by residual plot
+resid_panel(model)
+meets_assumptions=TRUE 
+
+if(meets_assumptions==FALSE){
+  #assumptions violated, therefore use rmodel for more outlier-robust lmer
+    model<-rlmer(y~tx*as.factor(x)+(1|animal),data=gfr)
+}
+
+
+
 summary(model)     
 anova(model)
 emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
@@ -148,10 +163,28 @@ cr<-droplevels(cr)
 
 
 
+
+
 #analysis
 #statistical analysis - lmer followed by bh-adjusted pairwise
-model<-lmer(y~tx*as.factor(x)+(1|daylen),data=cr)
+model<-lme4::lmer(y~tx*as.factor(x)+(1|daylen),data=cr)
+ 
+
+#reviewer 3 suggested we check for assumption violation/nonnormality
+#robustness of lmer to violations of assumption (residual distribution primarily)
+#is somewhat controversial.  See doi 10.1111/2041-210X.13434 and 10.18637/jss.v075.i06
+#we do this by residual plot
+resid_panel(model)
+meets_assumptions=FALSE 
+
+if(meets_assumptions==FALSE){
+  #non-normal, therefore use rmodel for outlier-robust lmer
+    model<-rlmer(y~tx*as.factor(x)+(1|daylen),data=cr)
+}
+
+
 summary(model)   
+
 anova(model)
 emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
 emm_means<-print(emm_model)
@@ -186,7 +219,7 @@ emm_sig_summary_paper(lac,pair_summary,emm_means, showall=TRUE)
 ## Plasma Urea Nitrogen
 
 ```{r bun, warning=FALSE, message=FALSE}
-# sCr: AKI --------------------------
+# BUN: AKI --------------------------
 ylab<-"BUN (mmol/L)"
 title<-"plBUN_cil_veh.tiff"
 bun<-M%>%select(x,plBUN,x_units,weight_kg,animal,daylen,model)%>%
@@ -214,9 +247,22 @@ bun<-droplevels(bun)
 
 #analysis
 #statistical analysis - lmer followed by bh-adjusted pairwise
-model<-lmer(y~tx*as.factor(x)+(1|daylen),data=bun)
+model<-lme4::lmer(y~tx*as.factor(x)+(1|daylen),data=bun)
+
+#reviewer 3 suggested we check for assumption violation/nonnormality
+#robustness of lmer to violations of assumption (residual distribution primarily)
+#is somewhat controversial.  See doi 10.1111/2041-210X.13434 and 10.18637/jss.v075.i06
+#we do this by residual plot
+resid_panel(model)
+meets_assumptions=FALSE 
+
+if(meets_assumptions==FALSE){
+  #non-normal, therefore use rmodel for outlier-robust lmer
+    model<-rlmer(y~tx*as.factor(x)+(1|daylen),data=bun)
+}
+
+
 summary(model)   
-anova(model)
 emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
 emm_means<-print(emm_model)
 pairs_model<-pairs(emm_model,by = "x", adjust="sidak")
@@ -379,7 +425,7 @@ cr<-cr%>%
 
 
 thresh=1.5
-max_thresh=0.70
+max_thresh=0.7
 
 cr<-cr%>%group_by(animal)%>%
   mutate(base_cr=plCR[x==0])%>% #baseline here is "hospital admission" not actual baseline
@@ -1138,8 +1184,23 @@ ddat<-dat%>%group_by(animal)%>%pivot_longer(4:5,names_to="timepoint")%>%
 ddat2448<-dat%>%group_by(animal)%>%pivot_longer(c(5,8),names_to="timepoint")%>%
   mutate(timepoint=factor(timepoint, levels=c("h24","h48")))
 
-model<-lmer(value~tx*timepoint+(1|animal), data=ddat2448)
+model<-lme4::lmer(value~tx*timepoint+(1|animal), data=ddat2448)
 summary(model)
+
+#reviewer 3 suggested we check for assumption violation/nonnormality
+#robustness of lmer to violations of assumption (residual distribution primarily)
+#is somewhat controversial.  See doi 10.1111/2041-210X.13434 and 10.18637/jss.v075.i06
+#we do this by residual plot
+resid_panel(model)
+meets_assumptions=TRUE 
+
+if(meets_assumptions==FALSE){
+  #non-normal, therefore use rmodel for outlier-robust lmer
+    model<-rlmer(y~tx*as.factor(x)+(1|daylen),data=bun)
+}
+
+
+
 emm_model <- emmeans(model,~tx*as.factor(timepoint),level=0.95)
 summary(emm_model)
 emm_means<-print(emm_model)
@@ -1298,7 +1359,21 @@ p<-ggplot(kivnc,aes(x=factor(x),y=y, fill=tx,color=tx))+
 
 #analysis
 #statistical analysis - lmer followed by bh-adjusted pairwise
-model<-lmer(y~tx*as.factor(x)+(1|animal),data=kivnc)
+model<-lme4::lmer(y~tx*as.factor(x)+(1|animal),data=kivnc)
+
+
+resid_panel(model)
+meets_assumptions=FALSE 
+
+if(meets_assumptions==FALSE){
+  #non-normal, therefore use rmodel for outlier-robust lmer
+    model<-rlmer(y~tx*as.factor(x)+(1|animal),data=kivnc)
+}
+
+
+
+
+
 summary(model)       
 emm_model <- emmeans(model,~tx*as.factor(x),level=0.95)
 emm_means<-print(emm_model)
@@ -1378,5 +1453,87 @@ dev.off()
 
 if(WRITE_PLOTS){ggsave(filename=here(figure_parts,title),plot=print(p), width=3.0, height=3,dpi=300,units="in")}
 
+
+```
+
+
+##  time to recovery of creatinine (time to event)
+``` {r time to creat recovery, warning=FALSE, message=FALSE}
+title<-"time_to_creatinine_recovery.tif"
+cr<-M%>%select(x,plCR,x_units,plCR_units,weight_kg,animal,daylen)%>%
+  mutate(cr=plCR,y=plCR, units_x=x_units, units_y=plCR_units,weight=weight_kg)
+cr<-cr%>%
+  filter(x%in%sched_labs_x)%>%
+  mutate(tx=factor(case_when(
+    animal%in%cila_tx ~ "cil",
+    animal%in%sham_sx ~ shamname,
+    animal%in%veh_tx ~ "veh",
+  )
+  ))%>%
+  group_by(tx,x)%>%mutate(mean=mean(y,na.rm=TRUE),sd=sd(y,na.rm=TRUE),sem=sd/n())%>%ungroup()%>%
+  filter(!is.na(y))%>%   
+  filter(tx!=shamname)%>%
+  filter(x%%1==0)%>%
+  filter((x>=-1)&(x<=48))
+
+thresh<-0.7
+
+cr<-cr%>%group_by(animal)%>%
+  mutate(base_cr=plCR[x==-1])%>%
+  mutate(basenormed_plCR=plCR/base_cr)%>%
+  mutate(max_cr=max(basenormed_plCR, na.rm=TRUE))%>%
+  mutate(h_max_cr=min(x[basenormed_plCR==max_cr]))%>%
+  rowwise()%>%
+  mutate(cr_lte_thresh_x_max=(basenormed_plCR<=(thresh*max_cr)))%>%
+  mutate(recovery_cr=((cr_lte_thresh_x_max)&(x>h_max_cr)))%>%
+  ungroup()
+
+
+
+kcr<-cr%>%select(animal,x,tx,base_cr,plCR,basenormed_plCR,max_cr,cr_lte_thresh_x_max,h_max_cr,recovery_cr, max_cr)
+kcr<-kcr%>%group_by(animal)%>%
+  mutate(h_recovery_cr=ifelse(mean(recovery_cr)>0,min(x[recovery_cr==TRUE]),49))%>%
+  mutate(outcome=ifelse(h_recovery_cr<=48,1,0))
+kcr.surv<-kcr%>%select(animal,tx,h_recovery_cr,outcome)%>%distinct()
+
+library (survival)
+library(survminer)
+k.surv.fit<-survfit(Surv(h_recovery_cr, outcome, type='right')~tx,data=kcr.surv)
+
+
+p<-ggsurvplot(k.surv.fit, data=kcr.surv,,censor=TRUE, pval = TRUE, pval.method=TRUE,
+           title ="",xlab="Time to Recovery", ylab="Proportion without outcome",
+           palette =cil_veh,
+           risk.table = FALSE,
+           tables.height = 0.2,
+           tables.theme = theme_cleantable())
+
+p
+
+
+#cr change from 24 to 48h
+cr_d2448<-cr%>%group_by(animal)%>%
+  filter(animal!=15&animal!=29)%>%#&animal!=77&animal!=82)%>% #remove animals which do not have a 48h gfr
+  mutate(cr48=cr[x==48], 
+         cr24=cr[x==24],
+         delta2448index=((cr48-cr24)/cr24),
+         delta2448=(cr48-cr24))%>%
+  select(animal,delta2448,tx,delta2448index)%>%
+  distinct()
+t.test(delta2448~tx,data=cr_d2448)
+wilcox.test(delta2448~tx,data=cr_d2448)
+
+t.test(delta2448index~tx,data=cr_d2448)
+wilcox.test(delta2448index~tx,data=cr_d2448)
+
+
+
+if(WRITE_PLOTS){ 
+  tiff(title)
+  tiff(here(figure_parts,title))
+  print(p)
+  dev.off()
+  ggsave(filename=here(figure_parts,title),plot=p$plot,dpi=300,units="in")
+}
 
 ```
