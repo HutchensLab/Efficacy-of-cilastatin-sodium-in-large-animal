@@ -1,0 +1,106 @@
+---
+title: "GFR and Creatinine Clearance"
+author: "Hutchens"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  word_document:
+    reference_docx: "word-styles-reference-01.docx"
+  pdf_document: default
+---
+
+```{r setup, include=FALSE,warning=FALSE,  message=FALSE, echo=FALSE}
+library(ragg)
+library (blandr)
+knitr::opts_chunk$set(echo = TRUE,dev = "ragg_png", cache=TRUE) 
+WRITE_PLOTS<<-FALSE
+```
+
+```{r includes,warning=FALSE,  message=FALSE, echo=FALSE}
+library(here)
+code<-here("R_script")
+data<-here("Data")
+figure_parts<-here("figure_parts")
+source(here(code,"paper_common.R"))
+source(here(code,"plot_common.R"))
+emm_sig_summary_paper<-emm_sig_summary_paper
+
+```
+
+## Test whether GFr and creatinine clearance agree in our dataset.
+
+Because we measured urine and plasma creatinine, and urine output, it is possible to calculate creatinine-based GFR as the clearance of creatinine at a specific time point. This measurement could be used to infer GFR at times when iohexol GFR was not available, if it were in close agreement with measured iohexol GFR. Therefore we performed Bland-Altman analysis to determine whether this measurement could be utilized in this way.
+
+A useful paper is <https://pmc.ncbi.nlm.nih.gov/articles/PMC4470095/>
+
+```{r filter data, echo=FALSE, results="show"}
+
+df<-M%>%filter(animal%in%included)%>%filter((!is.na(gfr))&(!is.na(CRclr_ml_min)))%>%
+  filter(x==6|x==24|x==48)
+
+```
+
+```{r correlate, echo=FALSE, results="show"}
+corr<-cor.test(df$CRclr_ml_min,df$gfr, method="pearson")
+label<-paste("Pearson r= ",as.character(round (corr$estimate,2)), "\np= ",as.character(corr$p.value))
+ggplot(df,aes(x=CRclr_ml_min,y=gfr))+
+  geom_point()+
+  annotate("text",x=100,y=200,label=label)+
+  xlim(0,450)+
+  ylim(0,450)+
+  coord_fixed(1)+
+  theme_classic()
+```
+
+```{r bland-altman, echo=TRUE, warnings="hide",results="show"}
+blandr.statistics (df$gfr,df$CRclr_ml_min)
+p<-blandr.draw(df$gfr,df$CRclr_ml_min)
+p<-p+theme_classic()+
+  ggtitle("Bland-Altman Plot for Creatinine Clearance vs. GFR")+
+  ylab("Creatinine Clearance-Measured GFR")+
+  xlab("mean(Creatinine Clearance,Measured GFR)")+
+  coord_cartesian( xlim=c( 0 , 350) , ylim=c( -350,350 ) , expand = FALSE )
+print(p)
+```
+
+The bias is about 17 (creatinine clearance overestimates GFR by 17 mL/min), quite small compared with GFR measurement. However the limits of agreement are very broad, and differences as large as suggested would not support careful inference about GFR data. Therefore, taken from the whole dataset, creatinine clearance should not be used to make inferences about GFR. There is heteroscedasticity as well, as the mean of both methods increases, agreement worsens. We can check to see if any of the time points is better than any other.
+
+```{r bland-altman6h, echo=TRUE, warnings="hide",results="show"}
+df6<-df%>%filter(x==6)
+blandr.statistics (df6$gfr,df6$CRclr_ml_min)
+p6<-blandr.draw(df6$gfr,df6$CRclr_ml_min)
+p6<-p6+theme_classic()+
+  ggtitle("Bland-Altman Plot for Creatinine Clearance vs. GFR")+
+  ylab("Creatinine Clearance-Measured GFR")+
+  xlab("mean(Creatinine Clearance,Measured GFR)")+
+  coord_cartesian( xlim=c( 0 , 350) , ylim=c( -350,350 ) , expand = FALSE )
+print(p6)
+```
+
+At 6h, the limits of agreement are much reduced compared to the whole dataset, however, the bias is increased to 33 ml/min, which is a pretty large value, and likely clinically significant. So although it is possible that earlier values might be better, the best data we have do not support using creatinine clearance to infer GFR, even at 6h.
+
+```{r bland-altman24h, echo=TRUE, warnings="hide",results="show"}
+df24<-df%>%filter(x==24)
+blandr.statistics (df24$gfr,df24$CRclr_ml_min)
+p24<-blandr.draw(df24$gfr,df24$CRclr_ml_min)
+p24<-p24+theme_classic()+
+  ggtitle("Bland-Altman Plot for Creatinine Clearance vs. GFR")+
+  ylab("Creatinine Clearance-Measured GFR")+
+  xlab("mean(Creatinine Clearance,Measured GFR)")+
+  coord_cartesian( xlim=c( 0 , 350) , ylim=c( -350,350 ) , expand = FALSE )
+print (p24)
+```
+
+At 24h, the bias and LOA are further decreased. This suggests that actually low GFR is what makes the two agreements likely to agree. These limits are likely acceptable. However, since we know that as GFR increases, agreement worsens, we still cannot use the creatinine clearance data to infer GFR.
+
+```{r bland-altman48h, echo=TRUE, warnings="hide",results="show"}
+df48<-df%>%filter(x==48)
+blandr.statistics (df48$gfr,df48$CRclr_ml_min)
+p48<-blandr.draw(df48$gfr,df48$CRclr_ml_min)
+p48<-p48+theme_classic()+
+  ggtitle("Bland-Altman Plot for Creatinine Clearance vs. GFR")+
+  ylab("Creatinine Clearance-Measured GFR")+
+  xlab("mean(Creatinine Clearance,Measured GFR)")+
+  coord_cartesian( xlim=c( 0 , 350) , ylim=c( -350,350 ) , expand = FALSE )
+p48
+```
